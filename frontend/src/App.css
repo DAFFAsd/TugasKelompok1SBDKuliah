@@ -199,6 +199,9 @@
   margin-top: 2em;
   margin-bottom: 2em;
   font-size: 0.9em;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.375rem;
+  overflow: hidden;
 }
 
 .prose table th {
@@ -206,16 +209,34 @@
   font-weight: 600;
   text-align: left;
   padding: 0.75em 1em;
-  border-bottom: 2px solid #e2e8f0;
+  border: 1px solid #e2e8f0;
 }
 
 .prose table td {
   padding: 0.75em 1em;
-  border-bottom: 1px solid #e2e8f0;
+  border: 1px solid #e2e8f0;
 }
 
-.prose table tr:last-child td {
-  border-bottom: none;
+.prose table tr:nth-child(2n) {
+  background-color: #f8fafc;
+}
+
+.dark .prose table {
+  border-color: #374151;
+}
+
+.dark .prose table th {
+  background-color: #1f2937;
+  border-color: #374151;
+  color: #e2e8f0;
+}
+
+.dark .prose table td {
+  border-color: #374151;
+}
+
+.dark .prose table tr:nth-child(2n) {
+  background-color: #1f2937;
 }
 
 /* Animation for page transitions */

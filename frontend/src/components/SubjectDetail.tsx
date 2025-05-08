@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import api from '../services/api';
 import type { Subject } from '../services/api';
 
@@ -85,7 +86,9 @@ const SubjectDetail = () => {
         </div>
 
         <div className="prose w-full dark:prose-invert dark:text-dark-text">
-          <ReactMarkdown>{subject.content}</ReactMarkdown>
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            {subject.content}
+          </ReactMarkdown>
         </div>
 
         {subject.updatedAt && (
