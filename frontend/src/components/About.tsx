@@ -41,7 +41,7 @@ const About = () => {
         <div className="card dark:bg-gradient-to-r dark:from-gray-800 dark:to-gray-700 dark:border dark:border-dark-border">
           <h1 className="text-3xl font-bold mb-2 text-secondary-900 dark:text-dark-text">About Our Team</h1>
           <p className="text-secondary-600 dark:text-dark-muted mb-8">
-            We are a team of students working on this markdown notes application as part of our NoSQL database course project.
+            We are a team of students working on this markdown notes application as part of our Sistem Basis Data course's project.
           </p>
 
           <h2 className="text-xl font-semibold mb-4 text-secondary-800 dark:text-dark-text pb-2 border-b border-secondary-200 dark:border-dark-border">

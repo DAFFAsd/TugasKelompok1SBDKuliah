@@ -98,6 +98,20 @@
   font-weight: 700;
 }
 
+.prose em {
+  font-style: italic !important;
+  color: inherit;
+  transform: skewX(-10deg); /* Add slight skew to make italic more noticeable */
+  display: inline-block;
+  font-family: 'Kumbh Sans', system-ui, sans-serif;
+  font-weight: inherit;
+}
+
+.dark .prose em {
+  color: inherit;
+  font-style: italic !important;
+}
+
 .prose ul, .prose ol {
   margin-top: 1.25em;
   margin-bottom: 1.25em;
@@ -303,6 +317,35 @@
   cursor: text !important;
 }
 
+/* Prevent page from scrolling to top when editor is used */
+html {
+  scroll-behavior: auto !important;
+  overflow-anchor: none;
+  overscroll-behavior-y: none;
+}
+
+/* Prevent scroll anchoring which can cause jumps */
+.markdown-editor-container,
+.no-scroll-anchor {
+  overflow-anchor: none;
+  position: relative;
+  z-index: 1;
+}
+
+/* Prevent scroll restoration on state changes */
+.no-scroll-anchor *,
+.prevent-scroll-reset,
+.prevent-scroll-reset * {
+  scroll-behavior: auto !important;
+  overscroll-behavior: none;
+}
+
+/* Disable scroll restoration for the entire app */
+.prevent-scroll-reset {
+  overflow-anchor: none;
+  scroll-behavior: auto !important;
+}
+
 /* Force cursor to be visible */
 .EasyMDEContainer .CodeMirror.CodeMirror-focused .CodeMirror-cursor {
   visibility: visible !important;
@@ -341,4 +384,147 @@
 /* Fix for editor preview */
 .EasyMDEContainer .editor-preview {
   padding: 1rem;
+}
+
+/* Custom Markdown Editor Styles */
+.markdown-preview {
+  font-family: 'Kumbh Sans', system-ui, sans-serif;
+}
+
+.markdown-editor-container textarea {
+  font-family: 'Kumbh Sans', system-ui, sans-serif;
+  line-height: 1.6;
+  min-height: 300px;
+  max-height: 600px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  outline: none !important;
+}
+
+.markdown-editor-container textarea:focus {
+  outline: none !important;
+  box-shadow: 0 0 0 2px rgba(66, 153, 225, 0.5);
+}
+
+/* Prevent focus loss */
+.markdown-editor-container textarea,
+.markdown-preview {
+  overscroll-behavior: none;
+  overflow-anchor: none;
+}
+
+/* Container custom styles */
+.container-custom {
+  width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+@media (min-width: 640px) {
+  .container-custom {
+    max-width: 640px;
+  }
+}
+
+@media (min-width: 768px) {
+  .container-custom {
+    max-width: 768px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .container-custom {
+    max-width: 1024px;
+  }
+}
+
+@media (min-width: 1280px) {
+  .container-custom {
+    max-width: 1280px;
+  }
+}
+
+@media (min-width: 1536px) {
+  .container-custom {
+    max-width: 1536px;
+  }
+}
+
+/* Side by Side View Styles */
+@media (min-width: 1024px) {
+  /* Increase container width for side-by-side view */
+  .max-w-6xl {
+    max-width: 80rem !important; /* Wider than default 6xl */
+  }
+
+  /* Special container width for side-by-side editor */
+  .container-custom.side-by-side-container {
+    max-width: 1536px !important;
+    padding-left: 2rem;
+    padding-right: 2rem;
+  }
+
+  /* Ensure equal width for editor and preview */
+  .lg\:w-1\/2 {
+    width: 50% !important;
+  }
+
+  /* Improve side-by-side layout */
+  .flex-col.lg\:flex-row {
+    display: flex;
+    align-items: stretch;
+  }
+
+  /* Make textarea taller in side-by-side mode */
+  .lg\:w-1\/2 textarea {
+    min-height: 500px;
+    height: 100%;
+    resize: vertical;
+  }
+
+  /* Make preview match textarea height */
+  .lg\:w-1\/2.markdown-preview {
+    min-height: 500px;
+    max-height: none;
+    height: auto;
+    padding-top: 1.5rem; /* Add extra padding at the top to compensate for missing header */
+  }
+
+  /* Improve spacing in side-by-side mode */
+  .flex-col.lg\:flex-row {
+    gap: 2rem;
+  }
+
+  /* Improve editor toolbar in side-by-side mode */
+  .side-by-side-container .flex-wrap.gap-1 {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  /* Prevent scroll jumps when clicking toolbar buttons */
+  .flex-wrap.gap-1 button {
+    scroll-behavior: auto;
+    overscroll-behavior: none;
+    user-select: none;
+  }
+}
+
+/* Sync scrolling for side-by-side view */
+textarea,
+.markdown-preview {
+  scroll-behavior: auto;
+}
+
+/* Improve responsiveness */
+@media (max-width: 1023px) {
+  .flex-col.lg\:flex-row {
+    gap: 1.5rem;
+  }
+
+  .markdown-preview,
+  textarea {
+    min-height: 350px;
+  }
 }

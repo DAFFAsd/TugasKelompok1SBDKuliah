@@ -15,7 +15,9 @@
     "react-dom": "^19.1.0",
     "react-markdown": "^9.0.1",
     "react-router-dom": "^6.23.1",
-    "react-simplemde-editor": "^5.2.0"
+    "react-simplemde-editor": "^5.2.0",
+    "remark-gfm": "^4.0.1",
+    "simplemde": "^1.11.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.25.0",

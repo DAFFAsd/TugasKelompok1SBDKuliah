@@ -12,7 +12,10 @@ services:
       - app-network
 
   backend:
-    build: ./backend
+    build:
+      context : ./backend
+      dockerfile: Dockerfile
+      no_cache: true
     container_name: backend
     restart: always
     ports:
@@ -26,15 +29,18 @@ services:
       - app-network
 
   frontend:
-    build: ./frontend
+    build: 
+      context: ./frontend
+      dockerfile: Dockerfile
+      no_cache: true
     container_name: frontend
     restart: always
     ports:
-      - "80:80"
+      - "4000:80"
     depends_on:
       - backend
     environment:
-      - VITE_API_URL=http://localhost:5000/api
+      - VITE_API_URL=/api
     networks:
       - app-network
 
@@ -44,3 +50,4 @@ networks:
 
 volumes:
   mongodb_data:
+

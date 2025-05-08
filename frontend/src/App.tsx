@@ -8,12 +8,17 @@ import { ThemeProvider } from './context/ThemeContext';
 import About from './components/About';
 
 function App() {
+  // Disable scroll restoration from React Router
+  if (window.history.scrollRestoration) {
+    window.history.scrollRestoration = 'manual';
+  }
+
   return (
     <ThemeProvider>
       <Router>
         <div className="min-h-screen bg-secondary-50 dark:bg-gradient-to-br dark:from-slate-900 dark:to-zinc-900 dark:text-dark-text transition-colors duration-200">
           <Navbar />
-          <main>
+          <main className="prevent-scroll-reset">
             <Routes>
               <Route path="/" element={<SubjectList />} />
               <Route path="/subjects/new" element={<SubjectForm />} />
