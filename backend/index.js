@@ -6,8 +6,13 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/markdown_db';
 
-// Middleware
-app.use(cors());
+// Enable CORS for all routes
+app.use(cors({
+  origin: '*', // Allow requests from any origin
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(express.json());
 
 // MongoDB Connection

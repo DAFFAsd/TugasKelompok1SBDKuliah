@@ -1,6 +1,8 @@
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+// Use relative URL for API requests to work with Nginx proxy
+// This ensures requests work from any device accessing the frontend
+const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 export interface Subject {
   _id?: string;
