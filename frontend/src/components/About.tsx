@@ -13,15 +13,15 @@ const About = () => {
       role: 'Main Developer',
     },
     {
-      name: 'Andi Muhammad Alvin',
+      name: '*********************',
       role: 'Team Member',
     },
     {
       name: 'Alexander Christian',
-      role: 'Team Member',
+      role: 'Rispek Developer',
     },
     {
-      name: 'Fathan Yazid Satriani',
+      name: '**********************',
       role: 'Team Member',
     },
   ];
@@ -76,7 +76,8 @@ const About = () => {
           <ul className="list-disc pl-5 mb-6 text-secondary-700 dark:text-dark-muted space-y-2">
             <li>React with TypeScript for the frontend</li>
             <li>Express.js for the backend API</li>
-            <li>MongoDB for the database</li>
+            <li>NeonDB (PostgreSQL) for the database</li>
+            <li>Redis for caching (login/session manager)</li>
             <li>Docker for containerization</li>
             <li>Tailwind CSS for styling</li>
           </ul>

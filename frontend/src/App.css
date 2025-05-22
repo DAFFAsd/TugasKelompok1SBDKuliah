@@ -201,7 +201,9 @@
   font-size: 0.9em;
   border: 1px solid #e2e8f0;
   border-radius: 0.375rem;
-  overflow: hidden;
+  overflow-x: auto;
+  display: block;
+  max-width: 100%;
 }
 
 .prose table th {
@@ -210,11 +212,17 @@
   text-align: left;
   padding: 0.75em 1em;
   border: 1px solid #e2e8f0;
+  min-width: 100px;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .prose table td {
   padding: 0.75em 1em;
   border: 1px solid #e2e8f0;
+  min-width: 100px;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .prose table tr:nth-child(2n) {
@@ -237,6 +245,14 @@
 
 .dark .prose table tr:nth-child(2n) {
   background-color: #1f2937;
+}
+
+/* Responsive table container */
+.prose .table-container {
+  overflow-x: auto;
+  max-width: 100%;
+  margin-top: 2em;
+  margin-bottom: 2em;
 }
 
 /* Animation for page transitions */
@@ -365,6 +381,24 @@ html {
 .prevent-scroll-reset {
   overflow-anchor: none;
   scroll-behavior: auto !important;
+}
+
+/* Custom styles for markdown links to prevent overflow */
+.overflow-wrap-anywhere {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  hyphens: auto;
+  max-width: 100%;
+  display: inline-block;
+}
+
+/* Ensure links in markdown content are properly wrapped */
+.prose a {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  hyphens: auto;
+  max-width: 100%;
+  display: inline-block;
 }
 
 /* Force cursor to be visible */
