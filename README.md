@@ -1,36 +1,51 @@
-# 📚 Markdown-Based Subject Management System
+# 🎓 Digilab-NG: Next-Generation Digital Learning Platform
 
-A comprehensive full-stack web application for managing educational subjects with markdown support. Built with modern web technologies and containerized with Docker.
+A comprehensive full-stack educational platform with markdown-based content management, social features, and interactive learning tools. Built with modern web technologies and containerized with Docker for easy deployment.
+
+## ✨ Key Features
+
+- **📝 Rich Markdown Content** - Create and manage educational content with full markdown support including math equations (KaTeX)
+- **📂 Modular Organization** - Organize content into classes, folders, and modules for structured learning
+- **👥 Social Interaction** - Built-in social features for discussions, posts, and comments
+- **📱 Responsive Design** - Fully responsive interface that works on desktop and mobile devices
+- **🌙 Dark Mode Support** - Toggle between light and dark themes for comfortable viewing
+- **🔒 Secure Authentication** - JWT-based authentication system with secure password handling
 
 ## 🚀 Technology Stack
 
 ### Frontend
 <div align="center">
-<img src="https://img.shields.io/badge/React-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React" />
+<img src="https://img.shields.io/badge/React_19-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React 19" />
 <img src="https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
-<img src="https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white" alt="Vite" />
+<img src="https://img.shields.io/badge/Vite_6-646CFF?style=for-the-badge&logo=vite&logoColor=white" alt="Vite" />
 <img src="https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="Tailwind" />
 </div>
 
-- **React** (v19) - Modern web framework for building user interfaces
-- **TypeScript** - Adds static typing to JavaScript for better development experience
-- **Vite** - Next-generation frontend build tool for faster development
-- **TailwindCSS** - Utility-first CSS framework for rapid UI development
-- **React Router DOM** - Client-side routing for single page applications
-- **React Markdown & SimpleMDE** - Rich markdown editing and rendering capabilities
+- **React** (v19) - Latest React framework with improved rendering and hooks
+- **TypeScript** - Type-safe development for better code quality and developer experience
+- **Vite** (v6) - Ultra-fast build tool with hot module replacement
+- **TailwindCSS** (v3) - Utility-first CSS framework for rapid UI development
+- **React Router DOM** (v6) - Client-side routing with the latest features
+- **React Markdown & SimpleMDE** - Rich markdown editing and rendering with math support
+- **KaTeX** - Fast math typesetting for the web
 - **Axios** - Promise-based HTTP client for API requests
 
 ### Backend
 <div align="center">
 <img src="https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=node.js&logoColor=white" alt="Node.js" />
-<img src="https://img.shields.io/badge/Express-000000?style=for-the-badge&logo=express&logoColor=white" alt="Express" />
+<img src="https://img.shields.io/badge/Express_5-000000?style=for-the-badge&logo=express&logoColor=white" alt="Express" />
 <img src="https://img.shields.io/badge/MongoDB-47A248?style=for-the-badge&logo=mongodb&logoColor=white" alt="MongoDB" />
+<img src="https://img.shields.io/badge/Redis-DC382D?style=for-the-badge&logo=redis&logoColor=white" alt="Redis" />
 </div>
 
 - **Node.js** - JavaScript runtime for server-side development
-- **Express** - Fast, unopinionated web framework for Node.js
-- **MongoDB** - NoSQL database for flexible data storage
-- **CORS** - Cross-Origin Resource Sharing support
+- **Express** (v5) - Fast, unopinionated web framework for Node.js
+- **MongoDB** - NoSQL database for flexible document storage
+- **Redis** - In-memory data store for caching and session management
+- **JWT** - JSON Web Tokens for secure authentication
+- **Bcrypt** - Password hashing for secure user authentication
+- **Multer** - Middleware for handling file uploads
+- **Cloudinary** - Cloud storage for media files and images
 
 ### DevOps & Tools
 <div align="center">
@@ -42,26 +57,24 @@ A comprehensive full-stack web application for managing educational subjects wit
 - **Docker** - Container platform for consistent environments
 - **Docker Compose** - Multi-container application orchestration
 - **Nginx** - High-performance web server and reverse proxy
-- **ESLint** - Static code analysis for better code quality
+- **ESLint** (v9) - Static code analysis for better code quality
 
-## 🏗️ Docker Architecture
+## 🏗️ System Architecture
 ![picture 1](https://i.imgur.com/cEMxalh.png)  
 
-
-The architecture diagram above shows:
+The architecture diagram shows:
 1. Docker Compose orchestrating three main containers
 2. Frontend serving React app through Nginx (port 2000:80)
 3. Backend running Express server (port 5000)
 4. MongoDB database with persistent volume (port 27017)
-5. Network flow between components
+5. Redis for caching and session management
+6. Network flow between components
 
-## 📊 Entity Relationship Diagram
+## 📊 Data Model
 ![picture 3](https://i.imgur.com/nZmB3oN.png)  
-
 
 ## 🔄 Application Flow
 ![picture 4](https://i.imgur.com/YmtmalC.png)  
-
 
 ## 🛠️ Setup and Installation
 
@@ -75,21 +88,26 @@ The architecture diagram above shows:
 
 1. **Clone the Repository**
    ```bash
-   git clone <repository-url>
-   cd <repository-name>
+   git clone https://github.com/yourusername/Digilab-NG.git
+   cd Digilab-NG
    ```
 
 2. **Environment Configuration**
    
-   Frontend (.env):
+   Create a `.env` file in the frontend directory:
    ```env
    VITE_API_URL=/api
    ```
 
-   Backend (.env):
+   Create a `.env` file in the backend directory:
    ```env
-   MONGODB_URI=mongodb://mongodb:27017/markdown_db
+   MONGODB_URI=mongodb://mongodb:27017/digilab_db
+   REDIS_URI=redis://redis:6379
    PORT=5000
+   JWT_SECRET=your_jwt_secret_key
+   CLOUDINARY_CLOUD_NAME=your_cloud_name
+   CLOUDINARY_API_KEY=your_api_key
+   CLOUDINARY_API_SECRET=your_api_secret
    ```
 
 3. **Local Development**
@@ -121,6 +139,7 @@ The architecture diagram above shows:
    - Frontend: http://localhost:2000
    - Backend API: http://localhost:5000
    - MongoDB: mongodb://localhost:27017
+   - Redis: redis://localhost:6379
 
 ## 👥 Development Team
 
@@ -154,7 +173,8 @@ docker-compose down -v
 docker-compose exec mongodb mongosh
 
 # Backup database
-docker-compose exec mongodb mongodump
+docker-compose exec mongodb mongodump --out=/data/backup
 
 # Restore database
-docker-compose exec mongodb mongorestore
+docker-compose exec mongodb mongorestore /data/backup
+```
