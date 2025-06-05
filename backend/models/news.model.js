@@ -25,31 +25,34 @@ const newsSchema = new Schema({
     required: true
   },
   linked_entity: {
-    entity_type: {
-      type: String,
-      enum: ['Class', 'Module', 'Assignment', null], // Model names must match exactly
-      default: null
+    // Define the linked_entity as an object with its own validation
+    type: {
+      entity_type: {
+        type: String,
+        enum: ['Class', 'Module', 'Assignment', null], // Model names must match exactly
+        default: null
+      },
+      entity_id: {
+        type: Schema.Types.ObjectId,
+        refPath: 'linked_entity.entity_type', // Dynamically references based on entity_type
+        default: null
+      }
     },
-    entity_id: {
-      type: Schema.Types.ObjectId,
-      refPath: 'linked_entity.entity_type', // Dynamically references based on entity_type
-      default: null
-    }
+    validate: { // This is the custom validator for the linked_entity object
+      validator: function(value) {
+        // 'value' here is the entire 'linked_entity' object ({ entity_type, entity_id })
+        if ((value.entity_id && !value.entity_type) || (!value.entity_id && value.entity_type)) {
+          return false;
+        }
+        return true;
+      },
+      message: 'If linking an entity, both entity_type and entity_id must be provided, or neither.'
+    },
+    default: () => ({ entity_type: null, entity_id: null }) // Ensure default is an object
   }
 }, {
   timestamps: true // Adds createdAt and updatedAt automatically
 });
-
-// Ensure that if entity_id is present, entity_type must also be present
-newsSchema.path('linked_entity').validate(function (value) {
-  if (value.entity_id && !value.entity_type) {
-    return false;
-  }
-  if (!value.entity_id && value.entity_type) {
-    return false;
-  }
-  return true;
-}, 'If linking an entity, both entity_type and entity_id must be provided, or neither.');
 
 const News = mongoose.model('News', newsSchema);
 
