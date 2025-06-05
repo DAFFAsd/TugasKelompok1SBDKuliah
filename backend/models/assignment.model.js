@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { ClassEnrollment } = require('./class.model');
 
 // Assignment Schema
 const assignmentSchema = new mongoose.Schema({
@@ -105,7 +106,6 @@ submissionSchema.index({ assignment_id: 1, user_id: 1 }, { unique: true });
 const Assignment = mongoose.model('Assignment', assignmentSchema);
 const Submission = mongoose.model('Submission', submissionSchema);
 const Grade = mongoose.model('Grade', gradeSchema);
-const ClassEnrollment = mongoose.model('ClassEnrollment', classEnrollmentSchema);
 
 module.exports = {
   Assignment,

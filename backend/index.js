@@ -67,25 +67,6 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Digilab-NG API is running' });
 });
 
-// Run migrations (development only)
-app.post('/api/run-migration', async (req, res) => {
-  try {
-    // Read the migration file
-    const fs = require('fs');
-    const path = require('path');
-    const migrationPath = path.join(__dirname, 'migrations', 'create_grades_table.sql');
-    const migrationSQL = fs.readFileSync(migrationPath, 'utf8');
-
-    // Execute the migration
-    await db.query(migrationSQL);
-
-    res.json({ status: 'ok', message: 'Migration executed successfully' });
-  } catch (error) {
-    console.error('Error running migration:', error);
-    res.status(500).json({ message: 'Error running migration', error: error.message });
-  }
-});
-
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);

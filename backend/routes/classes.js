@@ -3,9 +3,7 @@ const multer = require('multer');
 const mongoose = require('mongoose');
 const { authenticate, authorize } = require('../middleware/auth');
 const { uploadFile } = require('../config/cloudinary');
-const { Class, ClassEnrollment} = require('../models/class.model');
-const User = require('../models/user.model');
-
+const { Class , ClassEnrollment} = require('../models/class.model');
 const router = express.Router();
 
 // Configure multer for file uploads

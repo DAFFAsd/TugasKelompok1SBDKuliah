@@ -2,9 +2,9 @@ const express = require('express');
 const multer = require('multer');
 const { authenticate, authorize } = require('../middleware/auth');
 const { uploadFile } = require('../config/cloudinary');
-const { Assignment, Submission, Grade, ClassEnrollment } = require('../models/assignment.model');
+const { Assignment, Submission, Grade } = require('../models/assignment.model');
 const User = require('../models/user.model'); // Assuming User model exists
-const Class = require('../models/class.model'); // Assuming Class model exists
+const { Class, ClassEnrollment} = require('../models/class.model'); // Assuming Class model exists
 
 const router = express.Router();
 
