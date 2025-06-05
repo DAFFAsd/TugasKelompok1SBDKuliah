@@ -76,6 +76,29 @@ The architecture diagram shows:
 ## 🔄 Application Flow
 ![picture 4](https://i.imgur.com/YmtmalC.png)  
 
+# 💻 Key Features:
+
+## Dashboard
+![alt text](ImageReadme/DashboardScreenshot.jpg)
+
+## Classes
+![alt text](ImageReadme/ClassesListScreenshot.jpg)
+![alt text](ImageReadme/IsiClassesScreenshot.jpg)
+![alt text](ImageReadme/ClassesListScreenshot2.jpg)
+
+
+## Module System with Markdown and LaTeX Support
+![alt text](ImageReadme/editaddModule.jpg)
+
+## Assignment Submission and Grading
+![alt text](ImageReadme/AssigmentScreenshot.jpg)
+
+## Threads Feed for Discussions
+![alt text](ImageReadme/ThreadsScreenshot.jpg)
+
+## News Feed for New Announcement
+![alt text](ImageReadme/NewsScreenshot.jpg)
+
 ## 🛠️ Setup and Installation
 
 ### Prerequisites
