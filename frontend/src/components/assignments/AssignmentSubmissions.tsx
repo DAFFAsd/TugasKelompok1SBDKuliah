@@ -7,25 +7,24 @@ import remarkMath from 'remark-math';
 import remarkGfm from 'remark-gfm';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
-import { useTable, useSortBy, useGlobalFilter } from 'react-table';
-import type { Column } from 'react-table';
+import { useTable, useSortBy, useGlobalFilter, Column } from 'react-table';
 
 // API URL from environment
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 interface Assignment {
-  id: string;
+  id: number;
   title: string;
   description: string;
   deadline: string;
-  class_id: string;
+  class_id: number;
   class_title: string;
   creator_name: string;
 }
 
 interface Submission {
-  id: string;
-  user_id: string;
+  id: number;
+  user_id: number;
   username: string;
   content: string;
   file_url: string;
@@ -148,7 +147,7 @@ const AssignmentSubmissions = () => {
     fetchData();
   }, [id, user, navigate]);
 
-  // Setup for react-table
+  // Setup for react-table with proper typing
   const columns = useMemo<Column<Submission>[]>(() => [
     {
       Header: 'Student',
@@ -162,7 +161,7 @@ const AssignmentSubmissions = () => {
     {
       Header: 'Updated',
       accessor: 'updated_at',
-      Cell: ({ value, row }: { value: string, row: { original: Submission } }) =>
+      Cell: ({ value, row }: { value: string, row: any }) =>
         value !== row.original.submitted_at
           ? new Date(value).toLocaleString()
           : '-',
@@ -170,7 +169,7 @@ const AssignmentSubmissions = () => {
     {
       Header: 'Grade',
       accessor: 'grade',
-      Cell: ({ value }: { value: number | null | undefined }) =>
+      Cell: ({ value }: { value: number | null }) =>
         value !== null && value !== undefined ? `${value}/100` : 'Not graded',
     }
   ], []);
@@ -182,16 +181,17 @@ const AssignmentSubmissions = () => {
     );
   }, [submissions, searchTerm]);
 
-  // Setup react-table
+  // Setup react-table with proper typing
   const tableInstance = useTable<Submission>(
     {
       columns,
       data: filteredSubmissions,
       initialState: { 
-    }
-  },
-  useGlobalFilter,
-  useSortBy
+        sortBy: [{ id: 'submitted_at', desc: true }] 
+      } as any
+    },
+    useGlobalFilter,
+    useSortBy
   );
 
   const {
@@ -285,9 +285,8 @@ const AssignmentSubmissions = () => {
                       <tr {...headerGroup.getHeaderGroupProps()}>
                         {headerGroup.headers.map(column => (
                           <th
-                            {...column.getHeaderProps()}
-                            {...(column as any).getSortByToggleProps?.()}
-                            className="px-6 py-3 text-left text-xs font-medium text-secondary-500 dark:text-dark-muted uppercase tracking-wider"
+                            {...column.getHeaderProps((column as any).getSortByToggleProps?.())}
+                            className="px-6 py-3 text-left text-xs font-medium text-secondary-500 dark:text-dark-muted uppercase tracking-wider cursor-pointer"
                           >
                             {column.render('Header')}
                             <span>
@@ -308,11 +307,12 @@ const AssignmentSubmissions = () => {
                   <tbody {...getTableBodyProps()} className="bg-white dark:bg-gray-800 divide-y divide-secondary-200 dark:divide-dark-border">
                     {rows.map(row => {
                       prepareRow(row);
+                      const submission = row.original as Submission;
                       return (
                         <tr
                           {...row.getRowProps()}
                           className={`hover:bg-secondary-50 dark:hover:bg-gray-700 ${
-                            selectedSubmission?.id === row.original.id ? 'bg-secondary-100 dark:bg-gray-700' : ''
+                            selectedSubmission?.id === submission.id ? 'bg-secondary-100 dark:bg-gray-700' : ''
                           }`}
                         >
                           {row.cells.map(cell => (
@@ -325,7 +325,7 @@ const AssignmentSubmissions = () => {
                           ))}
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-secondary-900 dark:text-dark-text">
                             <button
-                              onClick={() => setSelectedSubmission(row.original)}
+                              onClick={() => setSelectedSubmission(submission)}
                               className="text-primary-600 hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300"
                             >
                               View

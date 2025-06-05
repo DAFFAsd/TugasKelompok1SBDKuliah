@@ -1,216 +1,176 @@
 const express = require('express');
 const { authenticate, authorize } = require('../middleware/auth');
-const { getDb, ObjectId } = require('../db');
+const Folder = require('../models/folder.model');
+const Class = require('../models/class.model');
+const Module = require('../models/module.model');
+// const User = require('../models/user.model'); // For createdBy population
 
 const router = express.Router();
-
-// Helper function to get DB instance
-const db = () => getDb();
 
 // Get all folders for a class
 router.get('/class/:classId', async (req, res) => {
   try {
-    if (!ObjectId.isValid(req.params.classId)) {
-      return res.status(400).json({ message: 'Invalid class ID format' });
+    const { classId } = req.params;
+    // Validate classId format if necessary, Mongoose does this for ObjectId by default
+    const classExists = await Class.findById(classId);
+    if (!classExists) {
+      return res.status(404).json({ message: 'Class not found' });
     }
-    const classId = new ObjectId(req.params.classId);
 
-    const folders = await db().collection('module_folders').aggregate([
-      { $match: { class_id: classId } },
-      {
-        $lookup: {
-          from: 'users',
-          localField: 'created_by',
-          foreignField: '_id',
-          as: 'creator'
-        }
-      },
-      { $unwind: { path: '$creator', preserveNullAndEmptyArrays: true } },
-      {
-        $lookup: {
-          from: 'modules',
-          localField: '_id',
-          foreignField: 'folder_id',
-          as: 'modulesInFolder'
-        }
-      },
-      {
-        $project: {
-          title: 1,
-          class_id: 1,
-          order_index: 1,
-          created_by: 1,
-          createdAt: 1,
-          updatedAt: 1,
-          creator_name: '$creator.username',
-          module_count: { $size: '$modulesInFolder' }
-        }
-      },
-      { $sort: { order_index: 1, createdAt: 1 } }
-    ]).toArray();
+    const folders = await Folder.find({ class_id: classId })
+      .populate('createdBy', 'username email full_name')
+      .sort({ order_index: 1, createdAt: 1 }); // Sort by order_index then by creation date
 
-    res.json(folders);
+    // Add module_count to each folder
+    // This is an N+1 query pattern, consider aggregation for performance on large datasets
+    const foldersWithModuleCount = await Promise.all(
+      folders.map(async (folder) => {
+        const moduleCount = await Module.countDocuments({ folder_id: folder._id });
+        return { ...folder.toObject(), module_count: moduleCount }; // Convert Mongoose doc to plain object to add properties
+      })
+    );
+
+    res.json(foldersWithModuleCount);
   } catch (error) {
     console.error('Error fetching folders:', error);
-    res.status(500).json({ message: 'Server error' });
+    if (error.kind === 'ObjectId') {
+        return res.status(400).json({ message: 'Invalid Class ID format' });
+    }
+    res.status(500).json({ message: 'Server error: ' + error.message });
   }
 });
 
 // Get a folder by ID
 router.get('/:id', async (req, res) => {
   try {
-    if (!ObjectId.isValid(req.params.id)) {
-      return res.status(400).json({ message: 'Invalid folder ID format' });
-    }
-    const folderId = new ObjectId(req.params.id);
-
-    const folder = await db().collection('module_folders').aggregate([
-      { $match: { _id: folderId } },
-      {
-        $lookup: {
-          from: 'users',
-          localField: 'created_by',
-          foreignField: '_id',
-          as: 'creator'
-        }
-      },
-      { $unwind: { path: '$creator', preserveNullAndEmptyArrays: true } },
-      {
-        $lookup: {
-          from: 'classes',
-          localField: 'class_id',
-          foreignField: '_id',
-          as: 'classInfo'
-        }
-      },
-      { $unwind: { path: '$classInfo', preserveNullAndEmptyArrays: true } },
-      {
-        $project: {
-          title: 1,
-          class_id: 1,
-          order_index: 1,
-          created_by: 1,
-          createdAt: 1,
-          updatedAt: 1,
-          creator_name: '$creator.username',
-          class_title: '$classInfo.title'
-        }
-      }
-    ]).next();
+    const folder = await Folder.findById(req.params.id)
+      .populate('createdBy', 'username email full_name')
+      .populate('class_id', 'title'); // Populate class_id to get class_title
 
     if (!folder) {
       return res.status(404).json({ message: 'Folder not found' });
     }
-    res.json(folder);
+    // Transform to include class_title directly if desired, or frontend can access folder.class_id.title
+    // For consistency with old API, let's add class_title
+    const response = folder.toObject();
+    if (response.class_id && response.class_id.title) {
+        response.class_title = response.class_id.title;
+    }
+
+    res.json(response);
   } catch (error) {
     console.error('Error fetching folder:', error);
-    res.status(500).json({ message: 'Server error' });
+    if (error.kind === 'ObjectId') {
+        return res.status(400).json({ message: 'Invalid Folder ID format' });
+    }
+    res.status(500).json({ message: 'Server error: ' + error.message });
   }
 });
 
-// Create a new folder (aslab only)
-router.post('/', authenticate, authorize(['aslab']), async (req, res) => {
+// Create a new folder (aslab/teacher only)
+router.post('/', authenticate, authorize(['aslab', 'teacher']), async (req, res) => {
   try {
     const { class_id, title, order_index = 0 } = req.body;
 
     if (!class_id || !title) {
       return res.status(400).json({ message: 'Class ID and title are required' });
     }
-    if (!ObjectId.isValid(class_id)) {
-      return res.status(400).json({ message: 'Invalid Class ID format' });
-    }
 
-    const classExists = await db().collection('classes').findOne({ _id: new ObjectId(class_id) });
+    // Check if class exists
+    const classExists = await Class.findById(class_id);
     if (!classExists) {
-      return res.status(404).json({ message: 'Class not found' });
+      return res.status(404).json({ message: 'Class not found for this folder' });
     }
 
-    const newFolder = {
-      class_id: new ObjectId(class_id),
+    const newFolder = new Folder({
+      class_id,
       title,
-      order_index: parseInt(order_index, 10) || 0,
-      created_by: new ObjectId(req.user.id),
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
+      order_index,
+      createdBy: req.user.id // Assuming req.user.id is the ObjectId of the authenticated user
+    });
 
-    const result = await db().collection('module_folders').insertOne(newFolder);
-    const insertedFolder = await db().collection('module_folders').findOne({ _id: result.insertedId });
-    res.status(201).json(insertedFolder);
+    let savedFolder = await newFolder.save();
+    savedFolder = await Folder.findById(savedFolder._id).populate('createdBy', 'username email full_name').populate('class_id', 'title');
+
+    res.status(201).json(savedFolder);
   } catch (error) {
     console.error('Error creating folder:', error);
-    res.status(500).json({ message: 'Server error' });
+    if (error.name === 'ValidationError') {
+        return res.status(400).json({ message: error.message });
+    }
+    if (error.kind === 'ObjectId') {
+        return res.status(400).json({ message: 'Invalid Class ID format for folder creation' });
+    }
+    res.status(500).json({ message: 'Server error: ' + error.message });
   }
 });
 
-// Update a folder (aslab only)
-router.put('/:id', authenticate, authorize(['aslab']), async (req, res) => {
+// Update a folder (aslab/teacher only)
+router.put('/:id', authenticate, authorize(['aslab', 'teacher']), async (req, res) => {
   try {
-    if (!ObjectId.isValid(req.params.id)) {
-      return res.status(400).json({ message: 'Invalid folder ID format' });
-    }
-    const folderId = new ObjectId(req.params.id);
     const { title, order_index } = req.body;
 
-    if (!title) {
-      return res.status(400).json({ message: 'Title is required' });
+    // Title is not strictly required for an update by Mongoose, but your old code did, let's keep it for now
+    if (title === '') { // Allow empty title to be set if that's desired, or add validation
+      return res.status(400).json({ message: 'Title cannot be empty if provided' });
     }
 
-    const folder = await db().collection('module_folders').findOne({ _id: folderId });
+    let folder = await Folder.findById(req.params.id);
     if (!folder) {
       return res.status(404).json({ message: 'Folder not found' });
     }
 
-    if (folder.created_by.toString() !== req.user.id && req.user.role !== 'aslab') {
+    // Authorization: Only allow the creator or an admin/aslab/teacher to update
+    if (folder.createdBy.toString() !== req.user.id && !['aslab', 'teacher', 'admin'].includes(req.user.role)) {
       return res.status(403).json({ message: 'Not authorized to update this folder' });
     }
 
-    const updateData = {
-      title,
-      updatedAt: new Date()
-    };
-    if (order_index !== undefined) {
-      updateData.order_index = parseInt(order_index, 10);
-    }
+    if (title !== undefined) folder.title = title;
+    if (order_index !== undefined) folder.order_index = order_index;
+    // class_id and createdBy should generally not be updated here
 
-    await db().collection('module_folders').updateOne({ _id: folderId }, { $set: updateData });
-    const updatedFolder = await db().collection('module_folders').findOne({ _id: folderId });
+    let updatedFolder = await folder.save();
+    updatedFolder = await Folder.findById(updatedFolder._id).populate('createdBy', 'username email full_name').populate('class_id', 'title');
+
     res.json(updatedFolder);
   } catch (error) {
     console.error('Error updating folder:', error);
-    res.status(500).json({ message: 'Server error' });
+    if (error.kind === 'ObjectId') {
+        return res.status(400).json({ message: 'Invalid Folder ID format' });
+    }
+    if (error.name === 'ValidationError') {
+        return res.status(400).json({ message: error.message });
+    }
+    res.status(500).json({ message: 'Server error: ' + error.message });
   }
 });
 
-// Delete a folder (aslab only)
-router.delete('/:id', authenticate, authorize(['aslab']), async (req, res) => {
+// Delete a folder (aslab/teacher only)
+router.delete('/:id', authenticate, authorize(['aslab', 'teacher']), async (req, res) => {
   try {
-    if (!ObjectId.isValid(req.params.id)) {
-      return res.status(400).json({ message: 'Invalid folder ID format' });
-    }
-    const folderId = new ObjectId(req.params.id);
-
-    const folder = await db().collection('module_folders').findOne({ _id: folderId });
+    const folder = await Folder.findById(req.params.id);
     if (!folder) {
       return res.status(404).json({ message: 'Folder not found' });
     }
 
-    if (folder.created_by.toString() !== req.user.id && req.user.role !== 'aslab') {
+    // Authorization: Only allow the creator or an admin/aslab/teacher to delete
+    if (folder.createdBy.toString() !== req.user.id && !['aslab', 'teacher', 'admin'].includes(req.user.role)) {
       return res.status(403).json({ message: 'Not authorized to delete this folder' });
     }
 
-    // Before deleting the folder, delete all modules within this folder
-    await db().collection('modules').deleteMany({ folder_id: folderId });
+    // TODO: Decide what happens to Modules within this Folder.
+    // Option 1: Delete them: await Module.deleteMany({ folder_id: req.params.id });
+    // Option 2: Unlink them (set folder_id to null): await Module.updateMany({ folder_id: req.params.id }, { $unset: { folder_id: "" } });
+    // For now, just deleting the folder.
+    await Folder.findByIdAndDelete(req.params.id);
 
-    const result = await db().collection('module_folders').deleteOne({ _id: folderId });
-    if (result.deletedCount === 0) {
-      return res.status(404).json({ message: 'Folder not found or already deleted' });
-    }
-
-    res.json({ message: 'Folder and its modules deleted successfully' });
+    res.json({ message: 'Folder deleted successfully' });
   } catch (error) {
     console.error('Error deleting folder:', error);
-    res.status(500).json({ message: 'Server error' });
+     if (error.kind === 'ObjectId') {
+        return res.status(400).json({ message: 'Invalid Folder ID format' });
+    }
+    res.status(500).json({ message: 'Server error: ' + error.message });
   }
 });
 

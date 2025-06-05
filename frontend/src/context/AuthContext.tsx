@@ -7,11 +7,11 @@ const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 // User interface
 export interface User {
-  _id: string;
+  id: number;
   username: string;
   email: string;
   role: 'aslab' | 'praktikan' | 'guest';
-  createdAt?: string;
+  created_at?: string;
   profile_image?: string | null;
 }
 

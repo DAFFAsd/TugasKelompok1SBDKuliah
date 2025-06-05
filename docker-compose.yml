@@ -11,6 +11,13 @@ services:
     networks:
       - app-network
 
+  redis:
+    image: redis:alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    networks:
+      - app-network
   backend:
     build:
       context : ./backend

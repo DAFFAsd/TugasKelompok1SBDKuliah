@@ -7,22 +7,22 @@ import { useAuth } from '../../context/AuthContext';
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 interface Module {
-  _id: string;
+  id: number;
   title: string;
-  folder_id: string | null;
+  folder_id: number | null;
   folder_title?: string;
-  class_id: string;
+  class_id: number;
   order_index: number;
-  created_by: string;
+  created_by: number;
   creator_name: string;
-  createdAt: string;
+  created_at: string;
 }
 
 interface ModuleListProps {
-  classId: string;
-  folderId: string | null;
+  classId: number;
+  folderId: number | null;
   canEdit?: boolean | null;
-  onModuleSelect?: (moduleId: string) => void;
+  onModuleSelect?: (moduleId: number) => void;
 }
 
 const ModuleList = ({ classId, folderId, canEdit, onModuleSelect }: ModuleListProps) => {
@@ -72,7 +72,7 @@ const ModuleList = ({ classId, folderId, canEdit, onModuleSelect }: ModuleListPr
   };
 
   // Handle module selection
-  const handleModuleClick = (moduleId: string) => {
+  const handleModuleClick = (moduleId: number) => {
     if (onModuleSelect) {
       onModuleSelect(moduleId);
     } else {
@@ -140,10 +140,10 @@ const ModuleList = ({ classId, folderId, canEdit, onModuleSelect }: ModuleListPr
       ) : (
         <ul className="divide-y divide-secondary-200 dark:divide-dark-border">
           {modules.map((module) => (
-            <li key={module._id} className="p-4 hover:bg-secondary-50 dark:hover:bg-gray-700">
+            <li key={module.id} className="p-4 hover:bg-secondary-50 dark:hover:bg-gray-700">
               <div className="flex items-center justify-between">
                 <button
-                  onClick={() => handleModuleClick(module._id)}
+                  onClick={() => handleModuleClick(module.id)}
                   className="flex-1 text-left"
                 >
                   <div className="flex items-center">
@@ -156,7 +156,7 @@ const ModuleList = ({ classId, folderId, canEdit, onModuleSelect }: ModuleListPr
                   <div className="mt-1 flex items-center text-xs text-secondary-500 dark:text-dark-muted">
                     <span>By {module.creator_name}</span>
                     <span className="mx-1">•</span>
-                    <span>{new Date(module.createdAt).toLocaleDateString()}</span>
+                    <span>{new Date(module.created_at).toLocaleDateString()}</span>
                     {!folderId && module.folder_title && (
                       <>
                         <span className="mx-1">•</span>
@@ -171,7 +171,7 @@ const ModuleList = ({ classId, folderId, canEdit, onModuleSelect }: ModuleListPr
                 {hasEditPermission && (
                   <div className="flex items-center space-x-1">
                     <Link
-                      to={`/modules/${module._id}/edit`}
+                      to={`/modules/${module.id}/edit`}
                       className="p-1 text-secondary-500 hover:text-secondary-700 dark:text-dark-muted dark:hover:text-dark-text"
                       aria-label="Edit module"
                     >

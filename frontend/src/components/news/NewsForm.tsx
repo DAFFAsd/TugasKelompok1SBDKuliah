@@ -17,28 +17,28 @@ interface NewsFormProps {
 }
 
 interface ClassOption {
-  id: string;
+  id: number;
   title: string;
 }
 
 interface ModuleFolderOption {
-  id: string;
+  id: number;
   title: string;
-  class_id: string;
+  class_id: number;
   modules: ModuleOption[];
 }
 
 interface ModuleOption {
-  id: string;
+  id: number;
   title: string;
-  folder_id: string | null;
-  class_id: string;
+  folder_id: number | null;
+  class_id: number;
 }
 
 interface AssignmentOption {
-  id: string;
+  id: number;
   title: string;
-  class_id: string;
+  class_id: number;
 }
 
 const NewsForm = ({ isEditing = false }: NewsFormProps) => {

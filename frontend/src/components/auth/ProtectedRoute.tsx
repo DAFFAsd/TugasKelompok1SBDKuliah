@@ -7,7 +7,7 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute = ({ allowedRoles, allowGuest = false }: ProtectedRouteProps) => {
-  const { isAuthenticated, user, isLoading } = useAuth();
+  const { isAuthenticated, user, isLoading, isGuest } = useAuth();
 
   // Show loading state
   if (isLoading) {

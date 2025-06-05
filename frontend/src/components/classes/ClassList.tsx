@@ -7,23 +7,23 @@ import { useAuth } from '../../context/AuthContext';
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 interface Class {
-  id: string;
+  id: number;
   title: string;
   description: string;
   creator_name: string;
   created_at: string;
   updated_at: string;
+  image_url: string;
   is_enrolled?: boolean;
-  image_url: string | null;
 }
 
 const ClassList = () => {
   const { user } = useAuth();
   const [classes, setClasses] = useState<Class[]>([]);
-  const [enrolledClasses, setEnrolledClasses] = useState<string[]>([]);
+  const [enrolledClasses, setEnrolledClasses] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [enrollingId, setEnrollingId] = useState<string | null>(null);
+  const [enrollingId, setEnrollingId] = useState<number | null>(null);
 
   useEffect(() => {
     const fetchClasses = async () => {
@@ -62,7 +62,7 @@ const ClassList = () => {
     fetchClasses();
   }, [user]);
 
-  const handleEnroll = async (classId: string) => {
+  const handleEnroll = async (classId: number) => {
     if (!user) {
       // Redirect to login if not authenticated
       window.location.href = '/login';

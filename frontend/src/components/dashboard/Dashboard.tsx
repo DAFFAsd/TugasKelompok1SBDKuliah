@@ -51,7 +51,7 @@ const getRemainingTimeText = (deadline: string): string => {
 };
 
 interface Class {
-  id: string;
+  id: number;
   title: string;
   description: string;
   creator_name: string;
@@ -60,16 +60,16 @@ interface Class {
 }
 
 interface Assignment {
-  id: string;
+  id: number;
   title: string;
   description: string;
   deadline: string;
-  class_id: string;
+  class_id: number;
   class_title: string;
 }
 
 interface News {
-  id: string;
+  id: number;
   title: string;
   content: string;
   image_url: string | null;
@@ -123,7 +123,7 @@ const Dashboard = () => {
     };
 
     // Only fetch data if the user is authenticated
-    if (user && user._id) {
+    if (user && user.id) {
       fetchDashboardData();
     }
   }, [user]);

@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 
 interface CreateAnnouncementButtonProps {
   entityType: 'class' | 'module' | 'assignment';
-  entityid: string;
+  entityId: number | string;
   entityTitle?: string;
   variant?: 'default' | 'icon' | 'text' | 'compact';
   className?: string;
@@ -12,7 +12,7 @@ interface CreateAnnouncementButtonProps {
 
 const CreateAnnouncementButton: React.FC<CreateAnnouncementButtonProps> = ({
   entityType,
-  entityid,
+  entityId,
   entityTitle,
   variant = 'default',
   className = ''
@@ -22,14 +22,14 @@ const CreateAnnouncementButton: React.FC<CreateAnnouncementButtonProps> = ({
   // Only aslab users can create announcements
   if (user?.role !== 'aslab') return null;
 
-  const url = `/news/create?type=${entityType}&id=${entityid}`;
-  const titleText = entityTitle ?
-    `Create announcement for "${entityTitle}"` :
+  const url = `/news/create?type=${entityType}&id=${entityId}`;
+  const titleText = entityTitle ? 
+    `Create announcement for "${entityTitle}"` : 
     `Create announcement for this ${entityType}`;
 
   if (variant === 'icon') {
     return (
-      <Link
+      <Link 
         to={url}
         className={`p-1 text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-300 ${className}`}
         title={titleText}
@@ -43,15 +43,15 @@ const CreateAnnouncementButton: React.FC<CreateAnnouncementButtonProps> = ({
 
   if (variant === 'text') {
     return (
-      <Link
-        to={url}
+      <Link 
+        to={url} 
         className={`text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-300 text-sm font-medium ${className}`}
       >
         Create announcement
       </Link>
     );
   }
-
+  
   if (variant === 'compact') {
     return (
       <Link

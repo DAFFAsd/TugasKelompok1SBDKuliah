@@ -13,22 +13,22 @@ import { useAuth } from '../../context/AuthContext';
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 interface Class {
-  id: string;
+  id: string; // Changed from number to string
   title: string;
 }
 
 interface Folder {
-  id: string;
+  id: string; // Changed from number to string
   title: string;
-  class_id: string;
+  class_id: string; // Changed from number to string
 }
 
 interface ModuleFile {
-  id: string;
+  id: string; // Changed from number to string
   file_name: string;
   file_url: string;
   file_type: string;
-  file_size: number;
+  file_size: number; // Assuming file_size remains number
   created_at: string;
 }
 
@@ -165,7 +165,7 @@ const ModuleForm = ({ isEditing = false }: ModuleFormProps) => {
   };
 
   // Handle existing file removal
-  const handleRemoveExistingFile = async (fileId: string) => {
+  const handleRemoveExistingFile = async (fileId: string) => { // Changed fileId type to string
     if (!window.confirm('Are you sure you want to remove this file?')) {
       return;
     }
@@ -300,7 +300,7 @@ const ModuleForm = ({ isEditing = false }: ModuleFormProps) => {
                 <select
                   id="class"
                   value={classId || ''}
-                  onChange={(e) => setClassId(e.target.value || null)}
+                  onChange={(e) => setClassId(e.target.value || null)} // Removed parseInt, use value directly or null
                   className="w-full px-3 py-2 border border-secondary-300 dark:border-dark-border rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-dark-text"
                   required
                 >
@@ -321,7 +321,7 @@ const ModuleForm = ({ isEditing = false }: ModuleFormProps) => {
               <select
                 id="folder"
                 value={folderId || ''}
-                  onChange={(e) => setFolderId(e.target.value || null)}
+                onChange={(e) => setFolderId(e.target.value || null)} // Removed parseInt, use value directly or null for empty selection
                 className="w-full px-3 py-2 border border-secondary-300 dark:border-dark-border rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-dark-text"
               >
                 <option value="">No folder (root level)</option>

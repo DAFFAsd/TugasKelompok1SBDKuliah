@@ -17,15 +17,6 @@ interface Class {
   title: string;
 }
 
-// This interface is used in the component
-interface Assignment {
-  id: string;
-  title: string;
-  description: string;
-  deadline: string;
-  class_id: string;
-}
-
 interface AssignmentFormProps {
   isEditing?: boolean;
 }
@@ -41,7 +32,7 @@ const AssignmentForm = ({ isEditing = false }: AssignmentFormProps) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [deadline, setDeadline] = useState('');
-  const [classId, setClassId] = useState<string | null>(classIdFromQuery || null);
+  const [classId, setClassId] = useState<string | null>(classIdFromQuery);
   const [classes, setClasses] = useState<Class[]>([]);
   const [previewMode, setPreviewMode] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -290,13 +281,13 @@ const AssignmentForm = ({ isEditing = false }: AssignmentFormProps) => {
                     // Insert placeholder at cursor position
                     const textarea = document.getElementById('description') as HTMLTextAreaElement;
                     const uploadingText = '![Uploading image...]()'
-
+                    
                     if (textarea) {
                       const start = textarea.selectionStart;
                       const end = textarea.selectionEnd;
                       const newContent = description.substring(0, start) + uploadingText + description.substring(end);
                       setDescription(newContent);
-
+                      
                       // Store cursor position for later
                       textarea.dataset.uploadStart = start.toString();
                     } else {
@@ -308,19 +299,19 @@ const AssignmentForm = ({ isEditing = false }: AssignmentFormProps) => {
                     const textarea = document.getElementById('description') as HTMLTextAreaElement;
                     const uploadingText = '![Uploading image...]()'
                     const imageMarkdown = `![image](${imageUrl})`;
-
+                    
                     if (textarea) {
                       const uploadStart = parseInt(textarea.dataset.uploadStart || '0');
                       const currentContent = description;
                       const placeholderIndex = currentContent
                         .indexOf(uploadingText, uploadStart > 0 ? uploadStart - uploadingText.length : 0);
-
+                      
                       if (placeholderIndex !== -1) {
-                        const newContent = currentContent.substring(0, placeholderIndex) +
-                          imageMarkdown +
+                        const newContent = currentContent.substring(0, placeholderIndex) + 
+                          imageMarkdown + 
                           currentContent.substring(placeholderIndex + uploadingText.length);
                         setDescription(newContent);
-
+                        
                         // Reset cursor position after content update
                         setTimeout(() => {
                           textarea.focus();

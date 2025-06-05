@@ -12,15 +12,15 @@ import 'katex/dist/katex.min.css';
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 interface Post {
-  id: string;
+  id: number;
   content: string;
   image_url: string | null;
   created_at: string;
   updated_at: string;
-  user_id: string;
+  user_id: number;
   username: string;
   linked_type: 'class' | 'module' | 'assignment' | null;
-  linked_id: string | null;
+  linked_id: number | null;
   class_title?: string;
   class_id?: number;
   module_title?: string;
@@ -32,10 +32,10 @@ interface Post {
 }
 
 interface Comment {
-  id: string;
+  id: number;
   content: string;
   created_at: string;
-  user_id: string;
+  user_id: number;
   username: string;
   profile_image?: string | null; // Add profile image field
 }
@@ -44,7 +44,7 @@ const PostDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
-
+  
   const [post, setPost] = useState<Post | null>(null);
   const [commentContent, setCommentContent] = useState('');
   const [loading, setLoading] = useState(true);
@@ -70,15 +70,15 @@ const PostDetail = () => {
 
   const handleSubmitComment = async (e: React.FormEvent) => {
     e.preventDefault();
-
+    
     if (!commentContent.trim()) return;
-
+    
     try {
       setSubmitting(true);
       const response = await axios.post(`${API_URL}/social/posts/${id}/comments`, {
         content: commentContent
       });
-
+      
       // Add the new comment to the list
       setPost(prev => {
         if (!prev) return prev;
@@ -87,7 +87,7 @@ const PostDetail = () => {
           comments: [...prev.comments, response.data]
         };
       });
-
+      
       // Clear the input
       setCommentContent('');
     } catch (err) {
@@ -98,20 +98,20 @@ const PostDetail = () => {
     }
   };
 
-  const handleDeleteComment = async (commentid: string) => {
+  const handleDeleteComment = async (commentId: number) => {
     if (!window.confirm('Are you sure you want to delete this comment? This action cannot be undone.')) {
       return;
     }
-
+    
     try {
-      await axios.delete(`${API_URL}/social/comments/${commentid}`);
-
+      await axios.delete(`${API_URL}/social/comments/${commentId}`);
+      
       // Remove the comment from the list
       setPost(prev => {
         if (!prev) return prev;
         return {
           ...prev,
-          comments: prev.comments.filter(comment => comment.id !== commentid)
+          comments: prev.comments.filter(comment => comment.id !== commentId)
         };
       });
     } catch (err) {
@@ -124,7 +124,7 @@ const PostDetail = () => {
     if (!window.confirm('Are you sure you want to delete this post? This action cannot be undone.')) {
       return;
     }
-
+    
     try {
       await axios.delete(`${API_URL}/social/posts/${id}`);
       navigate('/social');
@@ -137,12 +137,12 @@ const PostDetail = () => {
   // Get linked entity information
   const getLinkedEntityInfo = () => {
     if (!post || !post.linked_type) return null;
-
+    
     let icon;
     let title = '';
     let url = '';
     let entityType = '';
-
+    
     switch (post.linked_type) {
       case 'class':
         if (!post.class_id || !post.class_title) return null;
@@ -189,7 +189,7 @@ const PostDetail = () => {
       default:
         return null;
     }
-
+    
     return { icon, title, url, entityType };
   };
 
@@ -208,7 +208,7 @@ const PostDetail = () => {
       <div className="container-custom py-8">
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-400 dark:border-red-800 text-red-700 dark:text-red-400 px-4 py-3 rounded relative mb-4" role="alert">
           <span className="block sm:inline">{error}</span>
-          <button
+          <button 
             className="absolute top-0 bottom-0 right-0 px-4"
             onClick={() => setError(null)}
           >
@@ -235,7 +235,7 @@ const PostDetail = () => {
     );
   }
 
-  const isAuthor = user?._id === post.user_id;
+  const isAuthor = user?.id === post.user_id;
 
   return (
     <div className="container-custom py-8">
@@ -255,9 +255,9 @@ const PostDetail = () => {
             <div className="flex items-center">
               <div className="h-12 w-12 rounded-full bg-primary-100 dark:bg-primary-900 flex items-center justify-center text-primary-700 dark:text-primary-300 font-bold text-lg overflow-hidden">
                 {post.profile_image ? (
-      <img
-        src={post.profile_image}
-        alt={post.username}
+      <img 
+        src={post.profile_image} 
+        alt={post.username} 
         className="h-full w-full object-cover"
       />
     ) : (
@@ -269,12 +269,12 @@ const PostDetail = () => {
                   {post.username}
                 </p>
                 <p className="text-sm text-secondary-500 dark:text-dark-muted">
-                  {new Date(post.created_at).toLocaleDateString()}
+                  {new Date(post.created_at).toLocaleDateString()} 
                   {post.updated_at !== post.created_at && ' (edited)'}
                 </p>
               </div>
             </div>
-
+            
             {isAuthor && (
               <div className="flex space-x-2">
                 <button
@@ -314,8 +314,8 @@ const PostDetail = () => {
                     <h3 className="text-lg font-bold">{getLinkedEntityInfo()?.title}</h3>
                   </div>
                 </div>
-
-                <Link
+                
+                <Link 
                   to={getLinkedEntityInfo()?.url || '#'}
                   className="inline-flex items-center justify-center px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow transition-colors"
                 >
@@ -327,7 +327,7 @@ const PostDetail = () => {
               </div>
             </div>
           )}
-
+          
           {/* Use ReactMarkdown for rendering the post content */}
           <div className="text-secondary-900 dark:text-dark-text mb-4 prose dark:prose-invert prose-a:text-primary-600 dark:prose-a:text-primary-400 prose-headings:text-secondary-900 dark:prose-headings:text-dark-text max-w-none">
             <ReactMarkdown
@@ -347,7 +347,7 @@ const PostDetail = () => {
               {post.content}
             </ReactMarkdown>
           </div>
-
+          
           {post.image_url && (
             <div className="mb-4">
               <img
@@ -357,21 +357,21 @@ const PostDetail = () => {
               />
             </div>
           )}
-
+          
           {/* Comments section */}
           <div className="mt-6 border-t border-secondary-200 dark:border-dark-border pt-4">
             <h3 className="font-medium text-lg text-secondary-900 dark:text-dark-text mb-4">
               Comments ({post.comments.length})
             </h3>
-
+            
             {user && (
               <form onSubmit={handleSubmitComment} className="mb-6">
                 <div className="flex items-start space-x-2">
                   <div className="h-8 w-8 rounded-full bg-primary-100 dark:bg-primary-900 flex-shrink-0 flex items-center justify-center text-primary-700 dark:text-primary-300 font-bold overflow-hidden">
                     {user?.profile_image ? (
-      <img
-        src={user.profile_image}
-        alt={user.username}
+      <img 
+        src={user.profile_image} 
+        alt={user.username} 
         className="h-full w-full object-cover"
       />
     ) : (
@@ -400,16 +400,16 @@ const PostDetail = () => {
                 </div>
               </form>
             )}
-
+            
             {post.comments.length > 0 ? (
               <div className="space-y-4">
                 {post.comments.map(comment => (
                   <div key={comment.id} className="flex space-x-3">
                     <div className="h-8 w-8 rounded-full bg-primary-100 dark:bg-primary-900 flex-shrink-0 flex items-center justify-center text-primary-700 dark:text-primary-300 font-bold overflow-hidden">
                       {comment.profile_image ? (
-        <img
-          src={comment.profile_image}
-          alt={comment.username}
+        <img 
+          src={comment.profile_image} 
+          alt={comment.username} 
           className="h-full w-full object-cover"
         />
       ) : (
@@ -422,7 +422,7 @@ const PostDetail = () => {
                           <span className="font-medium text-secondary-900 dark:text-dark-text">
                             {comment.username}
                           </span>
-                          {user?._id === comment.user_id && (
+                          {user?.id === comment.user_id && (
                             <button
                               onClick={() => handleDeleteComment(comment.id)}
                               className="text-secondary-400 hover:text-red-500 dark:text-dark-muted dark:hover:text-red-400"

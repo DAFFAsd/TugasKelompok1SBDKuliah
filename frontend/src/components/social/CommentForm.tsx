@@ -6,11 +6,11 @@ import { useAuth } from '../../context/AuthContext';
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 interface CommentFormProps {
-  postid: string;
+  postId: number;
   onCommentAdded: (comment: any) => void;
 }
 
-const CommentForm = ({ postid, onCommentAdded }: CommentFormProps) => {
+const CommentForm = ({ postId, onCommentAdded }: CommentFormProps) => {
   const { user } = useAuth();
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(false);
@@ -18,7 +18,7 @@ const CommentForm = ({ postid, onCommentAdded }: CommentFormProps) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
+    
     if (!content.trim()) {
       return;
     }
@@ -26,11 +26,11 @@ const CommentForm = ({ postid, onCommentAdded }: CommentFormProps) => {
     try {
       setLoading(true);
       setError(null);
-
-      const response = await axios.post(`${API_URL}/social/posts/${postid}/comments`, {
+      
+      const response = await axios.post(`${API_URL}/social/posts/${postId}/comments`, {
         content: content.trim()
       });
-
+      
       onCommentAdded(response.data);
       setContent('');
     } catch (err: any) {

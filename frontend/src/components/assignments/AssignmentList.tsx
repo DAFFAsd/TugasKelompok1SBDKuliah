@@ -46,11 +46,11 @@ const getRemainingTimeText = (deadline: string): string => {
 };
 
 interface Assignment {
-  id: string;
+  id: number;
   title: string;
   description: string;
   deadline: string;
-  class_id: string;
+  class_id: number;
   class_title: string;
   creator_name: string;
   created_at: string;
@@ -93,7 +93,7 @@ const AssignmentList = () => {
     }
     acc[classId].assignments.push(assignment);
     return acc;
-  }, {} as Record<string, { id: string; title: string; assignments: Assignment[] }>);
+  }, {} as Record<number, { id: number; title: string; assignments: Assignment[] }>);
 
   // Sort assignments by deadline (upcoming first)
   Object.values(assignmentsByClass).forEach(classGroup => {

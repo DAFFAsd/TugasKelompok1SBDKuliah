@@ -6,7 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 interface Folder {
-  id: string;
+  id: number;
   title: string;
   order_index: number;
   module_count: number;
@@ -16,13 +16,13 @@ interface Folder {
 }
 
 interface FolderManagerProps {
-  classid: string;
-  onFolderSelect: (folderid: string | null) => void;
-  selectedFolderid: string | null;
+  classId: number;
+  onFolderSelect: (folderId: number | null) => void;
+  selectedFolderId: number | null;
   canEdit?: boolean | null;
 }
 
-const FolderManager = ({ classid, onFolderSelect, selectedFolderid, canEdit }: FolderManagerProps) => {
+const FolderManager = ({ classId, onFolderSelect, selectedFolderId, canEdit }: FolderManagerProps) => {
   const { user } = useAuth();
   // Use canEdit prop if provided, otherwise check if user is aslab
   const hasEditPermission = canEdit !== undefined ? canEdit : user?.role === 'aslab';
@@ -31,7 +31,7 @@ const FolderManager = ({ classid, onFolderSelect, selectedFolderid, canEdit }: F
   const [error, setError] = useState<string | null>(null);
   const [newFolderTitle, setNewFolderTitle] = useState('');
   const [isAddingFolder, setIsAddingFolder] = useState(false);
-  const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
+  const [editingFolderId, setEditingFolderId] = useState<number | null>(null);
   const [editingFolderTitle, setEditingFolderTitle] = useState('');
 
   // Fetch folders for the class
@@ -41,11 +41,11 @@ const FolderManager = ({ classid, onFolderSelect, selectedFolderid, canEdit }: F
         setLoading(true);
         setError(null);
 
-        const response = await axios.get(`${API_URL}/folders/class/${classid}`);
+        const response = await axios.get(`${API_URL}/folders/class/${classId}`);
         setFolders(response.data);
 
         // If no folder is selected and there are folders, select the first one
-        if (selectedFolderid === null && response.data.length > 0) {
+        if (selectedFolderId === null && response.data.length > 0) {
           onFolderSelect(response.data[0].id);
         }
 
@@ -58,7 +58,7 @@ const FolderManager = ({ classid, onFolderSelect, selectedFolderid, canEdit }: F
     };
 
     fetchFolders();
-  }, [classid, selectedFolderid, onFolderSelect]);
+  }, [classId, selectedFolderId, onFolderSelect]);
 
   // Handle adding a new folder
   const handleAddFolder = async () => {
@@ -70,7 +70,7 @@ const FolderManager = ({ classid, onFolderSelect, selectedFolderid, canEdit }: F
       setIsAddingFolder(true);
 
       const response = await axios.post(`${API_URL}/folders`, {
-        class_id: classid,
+        class_id: classId,
         title: newFolderTitle,
         order_index: folders.length // Add to the end
       });
@@ -89,18 +89,18 @@ const FolderManager = ({ classid, onFolderSelect, selectedFolderid, canEdit }: F
   };
 
   // Handle updating a folder
-  const handleUpdateFolder = async (folderid: string) => {
+  const handleUpdateFolder = async (folderId: number) => {
     if (!editingFolderTitle.trim()) {
       return;
     }
 
     try {
-      const response = await axios.put(`${API_URL}/folders/${folderid}`, {
+      const response = await axios.put(`${API_URL}/folders/${folderId}`, {
         title: editingFolderTitle
       });
 
       setFolders(folders.map(folder =>
-        folder.id === folderid ? { ...folder, title: response.data.title } : folder
+        folder.id === folderId ? { ...folder, title: response.data.title } : folder
       ));
 
       setEditingFolderId(null);
@@ -112,19 +112,19 @@ const FolderManager = ({ classid, onFolderSelect, selectedFolderid, canEdit }: F
   };
 
   // Handle deleting a folder
-  const handleDeleteFolder = async (folderid: string) => {
+  const handleDeleteFolder = async (folderId: number) => {
     if (!window.confirm('Are you sure you want to delete this folder? All modules in this folder will also be deleted.')) {
       return;
     }
 
     try {
-      await axios.delete(`${API_URL}/folders/${folderid}`);
+      await axios.delete(`${API_URL}/folders/${folderId}`);
 
-      const updatedFolders = folders.filter(folder => folder.id !== folderid);
+      const updatedFolders = folders.filter(folder => folder.id !== folderId);
       setFolders(updatedFolders);
 
       // If the deleted folder was selected, select another folder or null
-      if (selectedFolderid === folderid) {
+      if (selectedFolderId === folderId) {
         if (updatedFolders.length > 0) {
           onFolderSelect(updatedFolders[0].id);
         } else {
@@ -181,7 +181,7 @@ const FolderManager = ({ classid, onFolderSelect, selectedFolderid, canEdit }: F
 
       <ul className="divide-y divide-secondary-200 dark:divide-dark-border">
         {folders.map((folder) => (
-          <li key={folder.id} className={`p-4 hover:bg-secondary-50 dark:hover:bg-gray-700 ${selectedFolderid === folder.id ? 'bg-secondary-100 dark:bg-gray-700' : ''}`}>
+          <li key={folder.id} className={`p-4 hover:bg-secondary-50 dark:hover:bg-gray-700 ${selectedFolderId === folder.id ? 'bg-secondary-100 dark:bg-gray-700' : ''}`}>
             {editingFolderId === folder.id ? (
               <div className="flex items-center space-x-2">
                 <input

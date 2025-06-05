@@ -12,7 +12,7 @@ import rehypeKatex from 'rehype-katex';
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 interface News {
-  id: string;
+  id: number;
   title: string;
   content: string;
   image_url: string | null;
@@ -21,7 +21,7 @@ interface News {
   created_at: string;
   updated_at: string;
   linked_type: 'class' | 'module' | 'assignment' | null;
-  linked_id: string | null;
+  linked_id: number | null;
   class_title?: string;
   class_id?: number;
   module_title?: string;

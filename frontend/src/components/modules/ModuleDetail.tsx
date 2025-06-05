@@ -13,26 +13,26 @@ import CreateAnnouncementButton from '../news/CreateAnnouncementButton';
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 interface ModuleFile {
-  _id: string;
+  id: number;
   file_name: string;
   file_url: string;
   file_type: string;
   file_size: number;
-  createdAt: string;
+  created_at: string;
 }
 
 interface Module {
-  _id: string;
+  id: number;
   title: string;
   content: string;
-  class_id: string;
-  folder_id: string | null;
+  class_id: number;
+  folder_id: number | null;
   folder_title?: string;
   class_title: string;
   creator_name: string;
-  created_by: string;
-  createdAt: string;
-  updatedAt: string;
+  created_by: number;
+  created_at: string;
+  updated_at: string;
   files?: ModuleFile[];
 }
 
@@ -41,19 +41,11 @@ const ModuleDetail = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  interface News {
-    _id: string;
-    title: string;
-    content: string;
-    createdAt: string;
-  }
-
   const [module, setModule] = useState<Module | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isEnrolled, setIsEnrolled] = useState(false);
-  const [relatedNews, setRelatedNews] = useState<News[]>([]);
-  // This state is used to track loading state for news
+  const [relatedNews, setRelatedNews] = useState([]);
   const [loadingNews, setLoadingNews] = useState(false);
 
   useEffect(() => {
@@ -94,7 +86,7 @@ const ModuleDetail = () => {
 
       setLoadingNews(true);
       try {
-        const response = await axios.get(`${API_URL}/news/for/module/${module._id}`);
+        const response = await axios.get(`${API_URL}/news/for/module/${module.id}`);
         setRelatedNews(response.data);
       } catch (error) {
         console.error('Error fetching related news:', error);
@@ -154,7 +146,7 @@ const ModuleDetail = () => {
     );
   }
 
-  const isCreator = user && user._id.toString() === module.created_by;
+  const isCreator = user && user.id === module.created_by;
   const canEdit = user && (user.role === 'aslab' || isCreator);
   const canAccess = isEnrolled || canEdit || user?.role === 'aslab';
 
@@ -178,7 +170,7 @@ const ModuleDetail = () => {
               <span>•</span>
               <span>By {module.creator_name}</span>
               <span>•</span>
-              <span>{new Date(module.createdAt).toLocaleDateString()}</span>
+              <span>{new Date(module.created_at).toLocaleDateString()}</span>
             </div>
             <h1 className="text-3xl font-bold text-secondary-900 dark:text-dark-text">{module.title}</h1>
           </div>
@@ -253,7 +245,7 @@ const ModuleDetail = () => {
               </div>
               <ul className="divide-y divide-secondary-200 dark:divide-dark-border">
                 {module.files.map((file) => (
-                  <li key={file._id} className="p-4 hover:bg-secondary-50 dark:hover:bg-gray-700">
+                  <li key={file.id} className="p-4 hover:bg-secondary-50 dark:hover:bg-gray-700">
                     <a
                       href={`${API_URL}/download?url=${encodeURIComponent(file.file_url)}&filename=${encodeURIComponent(file.file_name)}`}
                       className="flex flex-wrap items-center"
@@ -268,7 +260,7 @@ const ModuleDetail = () => {
                           {file.file_name}
                         </span>
                         <p className="text-xs text-secondary-500 dark:text-dark-muted mt-1">
-                          {(file.file_size / 1024).toFixed(2)} KB • {new Date(file.createdAt).toLocaleDateString()}
+                          {(file.file_size / 1024).toFixed(2)} KB • {new Date(file.created_at).toLocaleDateString()}
                         </p>
                       </div>
                       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="flex-shrink-0 w-4 h-4 text-secondary-500 dark:text-dark-muted">
@@ -292,7 +284,7 @@ const ModuleDetail = () => {
                 {module && user?.role === 'aslab' && (
                   <CreateAnnouncementButton
                     entityType="module"
-                    entityid={module._id}
+                    entityId={module.id}
                     variant="compact"
                   />
                 )}
@@ -300,13 +292,13 @@ const ModuleDetail = () => {
               <div className="space-y-2">
                 {relatedNews.map(news => (
                   <Link
-                    key={news._id}
-                    to={`/news/${news._id}`}
+                    key={news.id}
+                    to={`/news/${news.id}`}
                     className="block p-3 border border-secondary-200 dark:border-dark-border rounded-md hover:bg-white dark:hover:bg-gray-700 transition-colors"
                   >
                     <div className="flex justify-between">
                       <span className="font-medium text-primary-600 dark:text-primary-400">{news.title}</span>
-                      <span className="text-xs text-secondary-500 dark:text-dark-muted">{new Date(news.createdAt).toLocaleDateString()}</span>
+                      <span className="text-xs text-secondary-500 dark:text-dark-muted">{new Date(news.created_at).toLocaleDateString()}</span>
                     </div>
                     <p className="text-sm text-secondary-600 dark:text-dark-muted line-clamp-2 mt-1">
                       {news.content.substring(0, 100)}...

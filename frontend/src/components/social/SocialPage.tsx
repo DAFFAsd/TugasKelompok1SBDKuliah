@@ -2,23 +2,25 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import PostForm from './PostForm';
+import PostForm from './PostForm.tsx';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 // API URL from environment
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 interface Post {
-  id: string;
+  id: number;
   content: string;
   image_url: string | null;
   created_at: string;
   updated_at: string;
-  user_id: string;
+  user_id: number;
   username: string;
   comment_count: number;
   // Add linked entity fields
   linked_type: 'class' | 'module' | 'assignment' | null;
-  linked_id: string | null;
+  linked_id: number | null;
   class_title?: string;
   class_id?: number;
   module_title?: string;

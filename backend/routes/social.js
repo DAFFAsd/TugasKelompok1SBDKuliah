@@ -1,102 +1,76 @@
 const express = require('express');
 const multer = require('multer');
-const { authenticate } = require('../middleware/auth'); // Assuming authorize is not used or handled by authenticate
+const mongoose = require('mongoose');
+const { authenticate } = require('../middleware/auth');
 const { uploadFile } = require('../config/cloudinary');
-const { getDb, ObjectId } = require('../db');
+const { Post, Comment } = require('../models/social.model');
 
 const router = express.Router();
 
 // Configure multer for file uploads
-const upload = multer({ dest: 'uploads/' }); // Consider memoryStorage
+const upload = multer({ dest: 'uploads/' });
 
-// Helper function to get DB instance
-const db = () => getDb();
-
-// Helper function to build linked entity lookup pipeline for posts
-const postLinkedEntityLookupPipeline = (preserve = true) => [
-  {
-    $lookup: {
-      from: 'classes',
-      let: { entityId: '$linkedEntity.entity_id', entityType: '$linkedEntity.type' },
-      pipeline: [
-        { $match: { $expr: { $and: [{ $eq: ['$_id', '$$entityId'] }, { $eq: ['$$entityType', 'class'] }] } } },
-        { $project: { title: 1 } }
-      ],
-      as: 'linkedClass'
-    }
-  },
-  { $unwind: { path: '$linkedClass', preserveNullAndEmptyArrays: preserve } },
-  {
-    $lookup: {
-      from: 'modules',
-      let: { entityId: '$linkedEntity.entity_id', entityType: '$linkedEntity.type' },
-      pipeline: [
-        { $match: { $expr: { $and: [{ $eq: ['$_id', '$$entityId'] }, { $eq: ['$$entityType', 'module'] }] } } },
-        { $project: { title: 1 } }
-      ],
-      as: 'linkedModule'
-    }
-  },
-  { $unwind: { path: '$linkedModule', preserveNullAndEmptyArrays: preserve } },
-  {
-    $lookup: {
-      from: 'assignments',
-      let: { entityId: '$linkedEntity.entity_id', entityType: '$linkedEntity.type' },
-      pipeline: [
-        { $match: { $expr: { $and: [{ $eq: ['$_id', '$$entityId'] }, { $eq: ['$$entityType', 'assignment'] }] } } },
-        { $project: { title: 1 } }
-      ],
-      as: 'linkedAssignment'
-    }
-  },
-  { $unwind: { path: '$linkedAssignment', preserveNullAndEmptyArrays: preserve } }
-];
-
-
-// Get all posts
+// Get all posts with populated user data and entity information
 router.get('/posts', authenticate, async (req, res) => {
   try {
-    const posts = await db().collection('posts').aggregate([
-      { $sort: { createdAt: -1 } },
-      {
-        $lookup: {
-          from: 'users',
-          localField: 'user_id',
-          foreignField: '_id',
-          as: 'authorInfo'
-        }
-      },
-      { $unwind: '$authorInfo' },
-      {
-        $lookup: { // For comment count
-          from: 'comments',
-          localField: '_id',
-          foreignField: 'post_id',
-          as: 'commentsArray'
-        }
-      },
-      ...postLinkedEntityLookupPipeline(true),
-      {
-        $project: {
-          content: 1, image_url: 1, createdAt: 1, updatedAt: 1, user_id: 1,
-          username: '$authorInfo.username',
-          profile_image: '$authorInfo.profile_image',
-          comment_count: { $size: '$commentsArray' },
-          linkedEntity: 1,
-          linked_title: {
-            $switch: {
-              branches: [
-                { case: { $eq: ['$linkedEntity.type', 'class'] }, then: '$linkedClass.title' },
-                { case: { $eq: ['$linkedEntity.type', 'module'] }, then: '$linkedModule.title' },
-                { case: { $eq: ['$linkedEntity.type', 'assignment'] }, then: '$linkedAssignment.title' }
-              ],
-              default: null
+    const posts = await Post.find()
+      .populate('user_id', 'username profile_image')
+      .populate('comment_count')
+      .sort({ created_at: -1 })
+      .lean();
+
+    // Add entity information based on linked_entity
+    const postsWithEntityInfo = await Promise.all(
+      posts.map(async (post) => {
+        const result = {
+          ...post,
+          id: post._id,
+          username: post.user_id?.username,
+          profile_image: post.user_id?.profile_image,
+          linked_type: post.linked_entity?.entity_type,
+          linked_id: post.linked_entity?.entity_id
+        };
+
+        // Get entity details if linked
+        if (post.linked_entity?.entity_type && post.linked_entity?.entity_id) {
+          try {
+            let entityModel;
+            switch (post.linked_entity.entity_type) {
+              case 'class':
+                entityModel = mongoose.model('Class');
+                const classData = await entityModel.findById(post.linked_entity.entity_id);
+                if (classData) {
+                  result.class_title = classData.title;
+                  result.class_id = classData._id;
+                }
+                break;
+              case 'module':
+                entityModel = mongoose.model('Module');
+                const moduleData = await entityModel.findById(post.linked_entity.entity_id);
+                if (moduleData) {
+                  result.module_title = moduleData.title;
+                  result.module_id = moduleData._id;
+                }
+                break;
+              case 'assignment':
+                entityModel = mongoose.model('Assignment');
+                const assignmentData = await entityModel.findById(post.linked_entity.entity_id);
+                if (assignmentData) {
+                  result.assignment_title = assignmentData.title;
+                  result.assignment_id = assignmentData._id;
+                }
+                break;
             }
+          } catch (entityError) {
+            console.error('Error fetching entity details:', entityError);
           }
         }
-      }
-    ]).toArray();
-    res.json(posts);
+
+        return result;
+      })
+    );
+
+    res.json(postsWithEntityInfo);
   } catch (error) {
     console.error('Error fetching posts:', error);
     res.status(500).json({ message: 'Server error' });
@@ -106,123 +80,114 @@ router.get('/posts', authenticate, async (req, res) => {
 // Get a post by ID with comments
 router.get('/posts/:id', authenticate, async (req, res) => {
   try {
-    if (!ObjectId.isValid(req.params.id)) {
-      return res.status(400).json({ message: 'Invalid post ID format' });
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: 'Invalid post ID' });
     }
-    const postId = new ObjectId(req.params.id);
 
-    const post = await db().collection('posts').aggregate([
-      { $match: { _id: postId } },
-      {
-        $lookup: {
-          from: 'users',
-          localField: 'user_id',
-          foreignField: '_id',
-          as: 'authorInfo'
-        }
-      },
-      { $unwind: '$authorInfo' },
-      ...postLinkedEntityLookupPipeline(true),
-      {
-        $lookup: { // Get comments for the post
-          from: 'comments',
-          let: { p_id: '$_id' },
-          pipeline: [
-            { $match: { $expr: { $eq: ['$post_id', '$$p_id'] } } },
-            { $sort: { createdAt: 1 } },
-            {
-              $lookup: {
-                from: 'users',
-                localField: 'user_id',
-                foreignField: '_id',
-                as: 'commentAuthorInfo'
-              }
-            },
-            { $unwind: '$commentAuthorInfo' },
-            {
-              $project: {
-                content: 1, createdAt: 1, user_id: 1, _id: 1,
-                username: '$commentAuthorInfo.username',
-                profile_image: '$commentAuthorInfo.profile_image'
-              }
-            }
-          ],
-          as: 'comments'
-        }
-      },
-      {
-        $project: {
-          content: 1, image_url: 1, createdAt: 1, updatedAt: 1, user_id: 1,
-          username: '$authorInfo.username',
-          profile_image: '$authorInfo.profile_image',
-          linkedEntity: 1,
-          linked_title: {
-            $switch: {
-              branches: [
-                { case: { $eq: ['$linkedEntity.type', 'class'] }, then: '$linkedClass.title' },
-                { case: { $eq: ['$linkedEntity.type', 'module'] }, then: '$linkedModule.title' },
-                { case: { $eq: ['$linkedEntity.type', 'assignment'] }, then: '$linkedAssignment.title' }
-              ],
-              default: null
-            }
-          },
-          comments: 1
-        }
-      }
-    ]).next();
+    const post = await Post.findById(req.params.id)
+      .populate('user_id', 'username profile_image')
+      .lean();
 
     if (!post) {
       return res.status(404).json({ message: 'Post not found' });
     }
-    res.json(post);
+
+    // Get comments for this post
+    const comments = await Comment.find({ post_id: req.params.id })
+      .populate('user_id', 'username profile_image')
+      .sort({ created_at: 1 })
+      .lean();
+
+    // Format post data
+    const result = {
+      ...post,
+      id: post._id,
+      username: post.user_id?.username,
+      profile_image: post.user_id?.profile_image,
+      linked_type: post.linked_entity?.entity_type,
+      linked_id: post.linked_entity?.entity_id,
+      comments: comments.map(comment => ({
+        ...comment,
+        id: comment._id,
+        username: comment.user_id?.username,
+        profile_image: comment.user_id?.profile_image
+      }))
+    };
+
+    // Get entity details if linked
+    if (post.linked_entity?.entity_type && post.linked_entity?.entity_id) {
+      try {
+        let entityModel;
+        switch (post.linked_entity.entity_type) {
+          case 'class':
+            entityModel = mongoose.model('Class');
+            const classData = await entityModel.findById(post.linked_entity.entity_id);
+            if (classData) {
+              result.class_title = classData.title;
+              result.class_id = classData._id;
+            }
+            break;
+          case 'module':
+            entityModel = mongoose.model('Module');
+            const moduleData = await entityModel.findById(post.linked_entity.entity_id);
+            if (moduleData) {
+              result.module_title = moduleData.title;
+              result.module_id = moduleData._id;
+            }
+            break;
+          case 'assignment':
+            entityModel = mongoose.model('Assignment');
+            const assignmentData = await entityModel.findById(post.linked_entity.entity_id);
+            if (assignmentData) {
+              result.assignment_title = assignmentData.title;
+              result.assignment_id = assignmentData._id;
+            }
+            break;
+        }
+      } catch (entityError) {
+        console.error('Error fetching entity details:', entityError);
+      }
+    }
+
+    res.json(result);
   } catch (error) {
     console.error('Error fetching post:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
 
-// Get posts for a specific linked entity
-router.get('/posts/for/:type/:entityId', authenticate, async (req, res) => {
+// Get posts for a specific linked entity (class, module, or assignment)
+router.get('/posts/for/:type/:id', async (req, res) => {
   try {
-    const { type, entityId } = req.params;
+    const { type, id } = req.params;
+    
     if (!['class', 'module', 'assignment'].includes(type)) {
       return res.status(400).json({ message: 'Invalid entity type' });
     }
-    if (!ObjectId.isValid(entityId)) {
-      return res.status(400).json({ message: `Invalid ${type} ID format` });
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid entity ID' });
     }
 
-    const posts = await db().collection('posts').aggregate([
-      { $match: { 'linkedEntity.type': type, 'linkedEntity.entity_id': new ObjectId(entityId) } },
-      { $sort: { createdAt: -1 } },
-      {
-        $lookup: { from: 'users', localField: 'user_id', foreignField: '_id', as: 'authorInfo' }
-      },
-      { $unwind: '$authorInfo' },
-      {
-        $lookup: { from: 'comments', localField: '_id', foreignField: 'post_id', as: 'commentsArray'}
-      },
-      // No need for full linkedEntityLookupPipeline as we are querying by it, but can include for title consistency
-      ...postLinkedEntityLookupPipeline(true),
-      {
-        $project: {
-          content: 1, image_url: 1, createdAt: 1, user_id: 1,
-          username: '$authorInfo.username', profile_image: '$authorInfo.profile_image',
-          comment_count: { $size: '$commentsArray' },
-          linkedEntity: 1,
-           linked_title: { // Keep for consistency if needed by frontend
-            $switch: {
-              branches: [
-                { case: { $eq: ['$linkedEntity.type', 'class'] }, then: '$linkedClass.title' },
-                { case: { $eq: ['$linkedEntity.type', 'module'] }, then: '$linkedModule.title' },
-                { case: { $eq: ['$linkedEntity.type', 'assignment'] }, then: '$linkedAssignment.title' }
-              ], default: null
-            }
-          }
-        }
-      }
-    ]).toArray();
-    res.json(posts);
+    const posts = await Post.find({
+      'linked_entity.entity_type': type,
+      'linked_entity.entity_id': id
+    })
+      .populate('user_id', 'username profile_image')
+      .populate('comment_count')
+      .sort({ created_at: -1 })
+      .lean();
+
+    const result = posts.map(post => ({
+      ...post,
+      id: post._id,
+      username: post.user_id?.username,
+      profile_image: post.user_id?.profile_image,
+      linked_type: post.linked_entity?.entity_type,
+      linked_id: post.linked_entity?.entity_id
+    }));
+
+    res.json(result);
   } catch (error) {
     console.error('Error fetching linked posts:', error);
     res.status(500).json({ message: 'Server error' });
@@ -231,265 +196,455 @@ router.get('/posts/for/:type/:entityId', authenticate, async (req, res) => {
 
 // Create a new post
 router.post('/posts', authenticate, upload.single('image'), async (req, res) => {
-  const session = db().client.startSession();
   try {
-    let createdPostWithDetails;
-    await session.withTransaction(async () => {
-      const { content, entityType, entityIdString } = req.body;
-      const file = req.file;
+    const { content, entityType, entityId } = req.body;
+    const file = req.file;
 
-      if (!content) {
-        await session.abortTransaction();
-        return res.status(400).json({ message: 'Content is required' });
+    if (!content) {
+      return res.status(400).json({ message: 'Content is required' });
+    }
+
+    // Validate entity type if provided
+    if (entityType && !['class', 'module', 'assignment'].includes(entityType)) {
+      return res.status(400).json({ message: 'Invalid entity type' });
+    }
+
+    // If entityType is provided, verify that the linked entity exists
+    if (entityType && entityId) {
+      if (!mongoose.Types.ObjectId.isValid(entityId)) {
+        return res.status(400).json({ message: 'Invalid entity ID' });
       }
 
-      let linkedEntity = null;
-      if (entityType && entityIdString) {
-        if (!['class', 'module', 'assignment'].includes(entityType)) {
-          await session.abortTransaction();
-          return res.status(400).json({ message: 'Invalid entity type' });
+      let entityExists = false;
+      try {
+        let entityModel;
+        switch(entityType) {
+          case 'class':
+            entityModel = mongoose.model('Class');
+            break;
+          case 'module':
+            entityModel = mongoose.model('Module');
+            break;
+          case 'assignment':
+            entityModel = mongoose.model('Assignment');
+            break;
         }
-        if (!ObjectId.isValid(entityIdString)) {
-          await session.abortTransaction();
-          return res.status(400).json({ message: `Invalid ${entityType} ID format` });
-        }
-        const collectionName = entityType === 'class' ? 'classes' : (entityType === 'module' ? 'modules' : 'assignments');
-        const entityDoc = await db().collection(collectionName).findOne({ _id: new ObjectId(entityIdString) }, { session });
-        if (!entityDoc) {
-          await session.abortTransaction();
-          return res.status(404).json({ message: `${entityType} not found` });
-        }
-        linkedEntity = { type: entityType, entity_id: new ObjectId(entityIdString) };
+        
+        const entity = await entityModel.findById(entityId);
+        entityExists = !!entity;
+      } catch (modelError) {
+        console.error('Error checking entity:', modelError);
       }
 
-      let imageUrl = null;
-      if (file) {
-        const uploadResult = await uploadFile(file, 'posts');
-        imageUrl = uploadResult.secure_url || uploadResult.url;
+      if (!entityExists) {
+        return res.status(404).json({ 
+          message: `${entityType.charAt(0).toUpperCase() + entityType.slice(1)} not found` 
+        });
       }
+    }
 
-      const newPost = {
-        user_id: new ObjectId(req.user.id),
-        content,
-        image_url: imageUrl,
-        linkedEntity,
-        createdAt: new Date(),
-        updatedAt: new Date()
+    let imageUrl = null;
+    if (file) {
+      const uploadResult = await uploadFile(file, 'posts');
+      imageUrl = uploadResult.url;
+    }
+
+    // Create post data
+    const postData = {
+      user_id: req.user.id,
+      content,
+      image_url: imageUrl
+    };
+
+    // Add linked entity if provided
+    if (entityType && entityId) {
+      postData.linked_entity = {
+        entity_type: entityType,
+        entity_id: entityId
       };
-      const result = await db().collection('posts').insertOne(newPost, { session });
-      
-      // Fetch the created post with all details for the response
-      createdPostWithDetails = await db().collection('posts').aggregate([
-        { $match: { _id: result.insertedId } },
-        { $lookup: { from: 'users', localField: 'user_id', foreignField: '_id', as: 'authorInfo' } },
-        { $unwind: '$authorInfo' },
-        { $addFields: { commentsArray: [] } }, // For comment_count: 0
-        ...postLinkedEntityLookupPipeline(true),
-        {
-          $project: {
-            content: 1, image_url: 1, createdAt: 1, user_id: 1, _id: 1,
-            username: '$authorInfo.username', profile_image: '$authorInfo.profile_image',
-            comment_count: { $size: '$commentsArray' }, // Will be 0
-            linkedEntity: 1,
-            linked_title: {
-              $switch: {
-                branches: [
-                  { case: { $eq: ['$linkedEntity.type', 'class'] }, then: '$linkedClass.title' },
-                  { case: { $eq: ['$linkedEntity.type', 'module'] }, then: '$linkedModule.title' },
-                  { case: { $eq: ['$linkedEntity.type', 'assignment'] }, then: '$linkedAssignment.title' }
-                ], default: null
-              }
+    }
+
+    const post = new Post(postData);
+    await post.save();
+
+    // Populate user data for response
+    await post.populate('user_id', 'username profile_image');
+
+    const result = {
+      ...post.toObject(),
+      id: post._id,
+      username: post.user_id?.username,
+      profile_image: post.user_id?.profile_image,
+      comment_count: 0,
+      linked_type: post.linked_entity?.entity_type,
+      linked_id: post.linked_entity?.entity_id
+    };
+
+    // Get linked entity details if applicable
+    if (entityType && entityId) {
+      try {
+        let entityModel;
+        switch (entityType) {
+          case 'class':
+            entityModel = mongoose.model('Class');
+            const classData = await entityModel.findById(entityId);
+            if (classData) {
+              result.class_title = classData.title;
+              result.class_id = classData._id;
             }
-          }
+            break;
+          case 'module':
+            entityModel = mongoose.model('Module');
+            const moduleData = await entityModel.findById(entityId);
+            if (moduleData) {
+              result.module_title = moduleData.title;
+              result.module_id = moduleData._id;
+            }
+            break;
+          case 'assignment':
+            entityModel = mongoose.model('Assignment');
+            const assignmentData = await entityModel.findById(entityId);
+            if (assignmentData) {
+              result.assignment_title = assignmentData.title;
+              result.assignment_id = assignmentData._id;
+            }
+            break;
         }
-      ], { session }).next();
-    });
-    res.status(201).json(createdPostWithDetails);
+      } catch (entityError) {
+        console.error('Error fetching entity details:', entityError);
+      }
+    }
+
+    res.status(201).json(result);
   } catch (error) {
     console.error('Error creating post:', error);
-    if (req.file) {
-        const fs = require('fs');
-        fs.unlink(req.file.path, err => { if (err) console.error("Error deleting multer temp file:", err);});
-    }
     res.status(500).json({ message: 'Server error' });
-  } finally {
-    await session.endSession();
   }
 });
 
 // Update a post
 router.put('/posts/:id', authenticate, upload.single('image'), async (req, res) => {
-  const session = db().client.startSession();
   try {
-    let updatedPostWithDetails;
-    await session.withTransaction(async () => {
-      if (!ObjectId.isValid(req.params.id)) {
-        await session.abortTransaction();
-        return res.status(400).json({ message: 'Invalid post ID format' });
-      }
-      const postId = new ObjectId(req.params.id);
-      const { content, entityType, entityIdString, image_url_removed } = req.body;
-      const file = req.file;
+    const { content, entityType, entityId } = req.body;
+    const file = req.file;
 
-      if (!content) {
-        await session.abortTransaction();
-        return res.status(400).json({ message: 'Content is required' });
+    if (!content) {
+      return res.status(400).json({ message: 'Content is required' });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: 'Invalid post ID' });
+    }
+
+    // Validate entity type if provided
+    if (entityType && !['class', 'module', 'assignment'].includes(entityType)) {
+      return res.status(400).json({ message: 'Invalid entity type' });
+    }
+
+    // Check if post exists and user is the creator
+    const post = await Post.findById(req.params.id);
+
+    if (!post) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
+    if (post.user_id.toString() !== req.user.id) {
+      return res.status(403).json({ message: 'Not authorized to update this post' });
+    }
+
+    // If entityType is provided, verify that the linked entity exists
+    if (entityType && entityId) {
+      if (!mongoose.Types.ObjectId.isValid(entityId)) {
+        return res.status(400).json({ message: 'Invalid entity ID' });
       }
 
-      const postDoc = await db().collection('posts').findOne({ _id: postId }, { session });
-      if (!postDoc) {
-        await session.abortTransaction();
-        return res.status(404).json({ message: 'Post not found' });
-      }
-      if (postDoc.user_id.toString() !== req.user.id) {
-        await session.abortTransaction();
-        return res.status(403).json({ message: 'Not authorized to update this post' });
-      }
-
-      const updateData = { content, updatedAt: new Date() };
-
-      if (entityType && entityIdString) {
-        if (!['class', 'module', 'assignment'].includes(entityType)) {
-          await session.abortTransaction();
-          return res.status(400).json({ message: 'Invalid entity type' });
+      let entityExists = false;
+      try {
+        let entityModel;
+        switch(entityType) {
+          case 'class':
+            entityModel = mongoose.model('Class');
+            break;
+          case 'module':
+            entityModel = mongoose.model('Module');
+            break;
+          case 'assignment':
+            entityModel = mongoose.model('Assignment');
+            break;
         }
-        if (!ObjectId.isValid(entityIdString)) {
-          await session.abortTransaction();
-          return res.status(400).json({ message: `Invalid ${entityType} ID format` });
-        }
-        const collectionName = entityType === 'class' ? 'classes' : (entityType === 'module' ? 'modules' : 'assignments');
-        const entityDoc = await db().collection(collectionName).findOne({ _id: new ObjectId(entityIdString) }, { session });
-        if (!entityDoc) {
-          await session.abortTransaction();
-          return res.status(404).json({ message: `${entityType} not found` });
-        }
-        updateData.linkedEntity = { type: entityType, entity_id: new ObjectId(entityIdString) };
-      } else if (entityType === '' && entityIdString === '') { // Explicitly unlinking
-        updateData.linkedEntity = null;
+        
+        const entity = await entityModel.findById(entityId);
+        entityExists = !!entity;
+      } catch (modelError) {
+        console.error('Error checking entity:', modelError);
       }
 
-      if (file) {
-        const uploadResult = await uploadFile(file, 'posts');
-        updateData.image_url = uploadResult.secure_url || uploadResult.url;
-      } else if (image_url_removed === 'true' || req.body.image_url === null) {
-         // TODO: Delete old image from Cloudinary if postDoc.image_url exists
-        updateData.image_url = null;
+      if (!entityExists) {
+        return res.status(404).json({ 
+          message: `${entityType.charAt(0).toUpperCase() + entityType.slice(1)} not found` 
+        });
       }
+    }
 
-      await db().collection('posts').updateOne({ _id: postId }, { $set: updateData }, { session });
-      
-      updatedPostWithDetails = await db().collection('posts').aggregate([
-        { $match: { _id: postId } },
-        { $lookup: { from: 'users', localField: 'user_id', foreignField: '_id', as: 'authorInfo' } },
-        { $unwind: '$authorInfo' },
-        { $lookup: { from: 'comments', localField: '_id', foreignField: 'post_id', as: 'commentsArray'} },
-        ...postLinkedEntityLookupPipeline(true),
-        {
-          $project: {
-            content: 1, image_url: 1, createdAt: 1, updatedAt: 1, user_id: 1, _id: 1,
-            username: '$authorInfo.username', profile_image: '$authorInfo.profile_image',
-            comment_count: { $size: '$commentsArray' },
-            linkedEntity: 1,
-            linked_title: {
-              $switch: {
-                branches: [
-                  { case: { $eq: ['$linkedEntity.type', 'class'] }, then: '$linkedClass.title' },
-                  { case: { $eq: ['$linkedEntity.type', 'module'] }, then: '$linkedModule.title' },
-                  { case: { $eq: ['$linkedEntity.type', 'assignment'] }, then: '$linkedAssignment.title' }
-                ], default: null
-              }
+    let imageUrl = post.image_url;
+    if (file) {
+      const uploadResult = await uploadFile(file, 'posts');
+      imageUrl = uploadResult.url;
+    }
+
+    // Update post data
+    const updateData = {
+      content,
+      image_url: imageUrl,
+      updated_at: new Date()
+    };
+
+    // Update entity link
+    if (entityType && entityId) {
+      updateData.linked_entity = {
+        entity_type: entityType,
+        entity_id: entityId
+      };
+    } else {
+      updateData.linked_entity = {
+        entity_type: null,
+        entity_id: null
+      };
+    }
+
+    const updatedPost = await Post.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true }
+    ).populate('user_id', 'username profile_image');
+
+    const result = {
+      ...updatedPost.toObject(),
+      id: updatedPost._id,
+      username: updatedPost.user_id?.username,
+      profile_image: updatedPost.user_id?.profile_image,
+      linked_type: updatedPost.linked_entity?.entity_type,
+      linked_id: updatedPost.linked_entity?.entity_id
+    };
+
+    // Get linked entity details if applicable
+    if (entityType && entityId) {
+      try {
+        let entityModel;
+        switch (entityType) {
+          case 'class':
+            entityModel = mongoose.model('Class');
+            const classData = await entityModel.findById(entityId);
+            if (classData) {
+              result.class_title = classData.title;
+              result.class_id = classData._id;
             }
-          }
+            break;
+          case 'module':
+            entityModel = mongoose.model('Module');
+            const moduleData = await entityModel.findById(entityId);
+            if (moduleData) {
+              result.module_title = moduleData.title;
+              result.module_id = moduleData._id;
+            }
+            break;
+          case 'assignment':
+            entityModel = mongoose.model('Assignment');
+            const assignmentData = await entityModel.findById(entityId);
+            if (assignmentData) {
+              result.assignment_title = assignmentData.title;
+              result.assignment_id = assignmentData._id;
+            }
+            break;
         }
-      ], { session }).next();
-    });
-    res.json(updatedPostWithDetails);
+      } catch (entityError) {
+        console.error('Error fetching entity details:', entityError);
+      }
+    }
+
+    res.json(result);
   } catch (error) {
     console.error('Error updating post:', error);
-    if (req.file) {
-        const fs = require('fs');
-        fs.unlink(req.file.path, err => { if (err) console.error("Error deleting multer temp file:", err);});
-    }
     res.status(500).json({ message: 'Server error' });
-  } finally {
-    await session.endSession();
+  }
+});
+
+// Add entity link to post
+router.post('/posts/:id/link/:entityType/:entityId', authenticate, async (req, res) => {
+  try {
+    const { id, entityType, entityId } = req.params;
+    
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid post ID' });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(entityId)) {
+      return res.status(400).json({ message: 'Invalid entity ID' });
+    }
+
+    // Verify post exists
+    const post = await Post.findById(id);
+    if (!post) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
+    // Only allow the creator to update links
+    if (post.user_id.toString() !== req.user.id) {
+      return res.status(403).json({ message: 'Not authorized to update this post' });
+    }
+    
+    // Validate entity type
+    if (!['class', 'module', 'assignment'].includes(entityType)) {
+      return res.status(400).json({ message: 'Invalid entity type' });
+    }
+
+    // Verify entity exists
+    let entityExists = false;
+    try {
+      let entityModel;
+      switch(entityType) {
+        case 'class':
+          entityModel = mongoose.model('Class');
+          break;
+        case 'module':
+          entityModel = mongoose.model('Module');
+          break;
+        case 'assignment':
+          entityModel = mongoose.model('Assignment');
+          break;
+      }
+      
+      const entity = await entityModel.findById(entityId);
+      entityExists = !!entity;
+    } catch (modelError) {
+      console.error('Error checking entity:', modelError);
+    }
+
+    if (!entityExists) {
+      return res.status(404).json({ 
+        message: `${entityType.charAt(0).toUpperCase() + entityType.slice(1)} not found` 
+      });
+    }
+
+    // Update the post with the new link
+    await Post.findByIdAndUpdate(id, {
+      linked_entity: {
+        entity_type: entityType,
+        entity_id: entityId
+      }
+    });
+
+    res.json({ message: 'Entity linked successfully' });
+  } catch (error) {
+    console.error('Error linking entity:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Remove entity link from post
+router.delete('/posts/:id/unlink', authenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid post ID' });
+    }
+
+    // Verify post exists
+    const post = await Post.findById(id);
+    if (!post) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
+    // Only allow the creator to remove links
+    if (post.user_id.toString() !== req.user.id) {
+      return res.status(403).json({ message: 'Not authorized to update this post' });
+    }
+
+    // Remove the link
+    await Post.findByIdAndUpdate(id, {
+      linked_entity: {
+        entity_type: null,
+        entity_id: null
+      }
+    });
+
+    res.json({ message: 'Entity link removed successfully' });
+  } catch (error) {
+    console.error('Error removing entity link:', error);
+    res.status(500).json({ message: 'Server error' });
   }
 });
 
 // Delete a post
 router.delete('/posts/:id', authenticate, async (req, res) => {
-  const session = db().client.startSession();
   try {
-    await session.withTransaction(async () => {
-      if (!ObjectId.isValid(req.params.id)) {
-        await session.abortTransaction();
-        return res.status(400).json({ message: 'Invalid post ID format' });
-      }
-      const postId = new ObjectId(req.params.id);
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: 'Invalid post ID' });
+    }
 
-      const postDoc = await db().collection('posts').findOne({ _id: postId }, { session });
-      if (!postDoc) {
-        await session.abortTransaction();
-        return res.status(404).json({ message: 'Post not found' });
-      }
-      if (postDoc.user_id.toString() !== req.user.id) {
-        await session.abortTransaction();
-        return res.status(403).json({ message: 'Not authorized to delete this post' });
-      }
+    // Check if post exists and user is the creator
+    const post = await Post.findById(req.params.id);
 
-      // TODO: Delete image from Cloudinary if postDoc.image_url exists
+    if (!post) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
 
-      await db().collection('comments').deleteMany({ post_id: postId }, { session });
-      await db().collection('posts').deleteOne({ _id: postId }, { session });
-      res.json({ message: 'Post and associated comments deleted successfully' });
-    });
+    if (post.user_id.toString() !== req.user.id) {
+      return res.status(403).json({ message: 'Not authorized to delete this post' });
+    }
+
+    // Delete all comments associated with this post first
+    await Comment.deleteMany({ post_id: req.params.id });
+
+    // Delete the post
+    await Post.findByIdAndDelete(req.params.id);
+
+    res.json({ message: 'Post deleted successfully' });
   } catch (error) {
     console.error('Error deleting post:', error);
     res.status(500).json({ message: 'Server error' });
-  } finally {
-    await session.endSession();
   }
 });
 
 // Add a comment to a post
 router.post('/posts/:id/comments', authenticate, async (req, res) => {
   try {
-    if (!ObjectId.isValid(req.params.id)) {
-      return res.status(400).json({ message: 'Invalid post ID format' });
-    }
-    const postId = new ObjectId(req.params.id);
     const { content } = req.body;
 
     if (!content) {
       return res.status(400).json({ message: 'Content is required' });
     }
 
-    const postExists = await db().collection('posts').findOne({ _id: postId });
-    if (!postExists) {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: 'Invalid post ID' });
+    }
+
+    // Check if post exists
+    const post = await Post.findById(req.params.id);
+    if (!post) {
       return res.status(404).json({ message: 'Post not found' });
     }
 
-    const newComment = {
-      post_id: postId,
-      user_id: new ObjectId(req.user.id),
-      content,
-      createdAt: new Date(),
-      updatedAt: new Date() // Though comments are usually not updated
-    };
-    const result = await db().collection('comments').insertOne(newComment);
-    
-    const createdComment = await db().collection('comments').aggregate([
-        { $match: { _id: result.insertedId } },
-        { $lookup: { from: 'users', localField: 'user_id', foreignField: '_id', as: 'authorInfo'} },
-        { $unwind: '$authorInfo' },
-        { $project: {
-            content: 1, createdAt: 1, user_id: 1, _id: 1, post_id: 1,
-            username: '$authorInfo.username',
-            profile_image: '$authorInfo.profile_image'
-        }}
-    ]).next();
+    const comment = new Comment({
+      post_id: req.params.id,
+      user_id: req.user.id,
+      content
+    });
 
-    res.status(201).json(createdComment);
+    await comment.save();
+
+    // Populate user data for response
+    await comment.populate('user_id', 'username profile_image');
+
+    const result = {
+      ...comment.toObject(),
+      id: comment._id,
+      username: comment.user_id?.username,
+      profile_image: comment.user_id?.profile_image
+    };
+
+    res.status(201).json(result);
   } catch (error) {
     console.error('Error creating comment:', error);
     res.status(500).json({ message: 'Server error' });
@@ -499,24 +654,23 @@ router.post('/posts/:id/comments', authenticate, async (req, res) => {
 // Delete a comment
 router.delete('/comments/:id', authenticate, async (req, res) => {
   try {
-    if (!ObjectId.isValid(req.params.id)) {
-      return res.status(400).json({ message: 'Invalid comment ID format' });
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: 'Invalid comment ID' });
     }
-    const commentId = new ObjectId(req.params.id);
 
-    const commentDoc = await db().collection('comments').findOne({ _id: commentId });
-    if (!commentDoc) {
+    // Check if comment exists and user is the creator
+    const comment = await Comment.findById(req.params.id);
+
+    if (!comment) {
       return res.status(404).json({ message: 'Comment not found' });
     }
-    if (commentDoc.user_id.toString() !== req.user.id) {
-      // Optionally, allow post author to delete comments on their post
-      // const postDoc = await db().collection('posts').findOne({ _id: commentDoc.post_id });
-      // if (!postDoc || postDoc.user_id.toString() !== req.user.id) {
+
+    if (comment.user_id.toString() !== req.user.id) {
       return res.status(403).json({ message: 'Not authorized to delete this comment' });
-      // }
     }
 
-    await db().collection('comments').deleteOne({ _id: commentId });
+    await Comment.findByIdAndDelete(req.params.id);
+
     res.json({ message: 'Comment deleted successfully' });
   } catch (error) {
     console.error('Error deleting comment:', error);

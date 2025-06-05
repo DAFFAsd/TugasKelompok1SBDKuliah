@@ -1,30 +1,30 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext.tsx';
+import { useAuth } from '../../context/AuthContext';
 import PostCard from './PostCard.tsx';
 
 interface Post {
-  id: string;
+  id: number;
   title: string;
   content: string;
   image_url: string | null;
   created_at: string;
   updated_at: string;
-  user_id: string;
+  user_id: number;
   username: string;
   comment_count: number;
 }
 
 interface PostListProps {
   posts: Post[];
-  onPostDeleted: (postid: string) => void;
+  onPostDeleted: (postId: number) => void;
 }
 
 const PostList = ({ posts, onPostDeleted }: PostListProps) => {
   const { user } = useAuth();
   const [editingPostId, setEditingPostId] = useState<number | null>(null);
   
-  const handleEditPost = (postid: string) => {
+  const handleEditPost = (postId: number) => {
     setEditingPostId(postId);
   };
   

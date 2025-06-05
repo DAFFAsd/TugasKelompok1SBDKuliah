@@ -1,44 +1,35 @@
 const express = require('express');
 const multer = require('multer');
+const mongoose = require('mongoose');
 const { authenticate, authorize } = require('../middleware/auth');
 const { uploadFile } = require('../config/cloudinary');
-const { getDb, ObjectId } = require('../db');
+const { Class, ClassEnrollment} = require('../models/class.model');
+const User = require('../models/user.model');
 
 const router = express.Router();
 
 // Configure multer for file uploads
-const upload = multer({ dest: 'uploads/' }); // Consider memoryStorage
-
-// Helper function to get DB instance
-const db = () => getDb();
+const upload = multer({ dest: 'uploads/' });
 
 // Get all classes
 router.get('/', async (req, res) => {
   try {
-    const classes = await db().collection('classes').aggregate([
-      {
-        $lookup: {
-          from: 'users',
-          localField: 'created_by',
-          foreignField: '_id',
-          as: 'creator'
-        }
-      },
-      { $unwind: { path: '$creator', preserveNullAndEmptyArrays: true } },
-      {
-        $project: {
-          title: 1,
-          description: 1,
-          image_url: 1,
-          created_by: 1,
-          createdAt: 1,
-          updatedAt: 1,
-          creator_name: '$creator.username'
-        }
-      },
-      { $sort: { createdAt: -1 } }
-    ]).toArray();
-    res.json(classes);
+    const classes = await Class.find()
+      .populate('created_by', 'username email full_name profile_image')
+      .populate('enrollment_count')
+      .sort({ created_at: -1 })
+      .lean();
+
+    const result = classes.map(classItem => ({
+      ...classItem,
+      id: classItem._id,
+      creator_name: classItem.created_by?.username,
+      creator_email: classItem.created_by?.email,
+      creator_full_name: classItem.created_by?.full_name,
+      creator_profile_image: classItem.created_by?.profile_image
+    }));
+
+    res.json(result);
   } catch (error) {
     console.error('Error fetching classes:', error);
     res.status(500).json({ message: 'Server error' });
@@ -48,42 +39,81 @@ router.get('/', async (req, res) => {
 // Get a class by ID
 router.get('/:id', async (req, res) => {
   try {
-    if (!ObjectId.isValid(req.params.id)) {
-      return res.status(400).json({ message: 'Invalid class ID format' });
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: 'Invalid class ID' });
     }
-    const classId = new ObjectId(req.params.id);
 
-    const classDoc = await db().collection('classes').aggregate([
-      { $match: { _id: classId } },
-      {
-        $lookup: {
-          from: 'users',
-          localField: 'created_by',
-          foreignField: '_id',
-          as: 'creator'
-        }
-      },
-      { $unwind: { path: '$creator', preserveNullAndEmptyArrays: true } },
-      {
-        $project: {
-          title: 1,
-          description: 1,
-          image_url: 1,
-          created_by: 1,
-          createdAt: 1,
-          updatedAt: 1,
-          creator_name: '$creator.username',
-          // You might want to include enrollment count or other details here later
-        }
-      }
-    ]).next();
+    const classItem = await Class.findById(req.params.id)
+      .populate('created_by', 'username email full_name profile_image')
+      .populate('enrollment_count')
+      .lean();
 
-    if (!classDoc) {
+    if (!classItem) {
       return res.status(404).json({ message: 'Class not found' });
     }
-    res.json(classDoc);
+
+    const result = {
+      ...classItem,
+      id: classItem._id,
+      creator_name: classItem.created_by?.username,
+      creator_email: classItem.created_by?.email,
+      creator_full_name: classItem.created_by?.full_name,
+      creator_profile_image: classItem.created_by?.profile_image
+    };
+
+    res.json(result);
   } catch (error) {
     console.error('Error fetching class:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Get class with enrolled users (for aslab)
+router.get('/:id/enrollments', authenticate, authorize(['aslab']), async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: 'Invalid class ID' });
+    }
+
+    const classItem = await Class.findById(req.params.id)
+      .populate('created_by', 'username email full_name profile_image');
+
+    if (!classItem) {
+      return res.status(404).json({ message: 'Class not found' });
+    }
+
+    // Check if user is the creator or has aslab role
+    if (classItem.created_by._id.toString() !== req.user.id && req.user.role !== 'aslab') {
+      return res.status(403).json({ message: 'Not authorized to view enrollments' });
+    }
+
+    const enrollments = await ClassEnrollment.find({ class_id: req.params.id })
+      .populate('user_id', 'username email full_name profile_image')
+      .sort({ enrolled_at: -1 })
+      .lean();
+
+    const result = {
+      class: {
+        ...classItem.toObject(),
+        id: classItem._id,
+        creator_name: classItem.created_by?.username
+      },
+      enrollments: enrollments.map(enrollment => ({
+        ...enrollment,
+        id: enrollment._id,
+        user: {
+          id: enrollment.user_id._id,
+          username: enrollment.user_id.username,
+          email: enrollment.user_id.email,
+          full_name: enrollment.user_id.full_name,
+          profile_image: enrollment.user_id.profile_image
+        }
+      }))
+    };
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error fetching class enrollments:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -100,31 +130,31 @@ router.post('/', authenticate, authorize(['aslab']), upload.single('image'), asy
 
     let imageUrl = null;
     if (file) {
-      const uploadResult = await uploadFile(file, 'classes'); // Ensure uploadFile is robust
-      imageUrl = uploadResult.secure_url || uploadResult.url;
+      const uploadResult = await uploadFile(file, 'classes');
+      imageUrl = uploadResult.url;
     }
 
-    const newClass = {
+    const newClass = new Class({
       title,
       description: description || '',
       image_url: imageUrl,
-      created_by: new ObjectId(req.user.id),
-      createdAt: new Date(),
-      updatedAt: new Date()
+      created_by: req.user.id
+    });
+
+    await newClass.save();
+
+    // Populate creator info for response
+    await newClass.populate('created_by', 'username email full_name profile_image');
+
+    const result = {
+      ...newClass.toObject(),
+      id: newClass._id,
+      creator_name: newClass.created_by?.username
     };
 
-    const result = await db().collection('classes').insertOne(newClass);
-    const insertedClass = await db().collection('classes').findOne({_id: result.insertedId});
-    res.status(201).json(insertedClass);
+    res.status(201).json(result);
   } catch (error) {
     console.error('Error creating class:', error);
-    // Clean up multer temp file if Cloudinary upload failed or other error
-    if (req.file) {
-        const fs = require('fs');
-        fs.unlink(req.file.path, err => {
-            if (err) console.error("Error deleting multer temp file:", err);
-        });
-    }
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -132,10 +162,6 @@ router.post('/', authenticate, authorize(['aslab']), upload.single('image'), asy
 // Update a class (aslab only)
 router.put('/:id', authenticate, authorize(['aslab']), upload.single('image'), async (req, res) => {
   try {
-    if (!ObjectId.isValid(req.params.id)) {
-      return res.status(400).json({ message: 'Invalid class ID format' });
-    }
-    const classId = new ObjectId(req.params.id);
     const { title, description } = req.body;
     const file = req.file;
 
@@ -143,40 +169,48 @@ router.put('/:id', authenticate, authorize(['aslab']), upload.single('image'), a
       return res.status(400).json({ message: 'Title is required' });
     }
 
-    const classDoc = await db().collection('classes').findOne({ _id: classId });
-    if (!classDoc) {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: 'Invalid class ID' });
+    }
+
+    // Check if class exists
+    const classItem = await Class.findById(req.params.id);
+
+    if (!classItem) {
       return res.status(404).json({ message: 'Class not found' });
     }
 
-    if (classDoc.created_by.toString() !== req.user.id && req.user.role !== 'aslab') {
+    // Only allow the creator or an aslab to update
+    if (classItem.created_by.toString() !== req.user.id && req.user.role !== 'aslab') {
       return res.status(403).json({ message: 'Not authorized to update this class' });
     }
 
-    const updateData = {
-      title,
-      description: description || classDoc.description,
-      updatedAt: new Date()
-    };
-
+    let imageUrl = classItem.image_url;
     if (file) {
       const uploadResult = await uploadFile(file, 'classes');
-      updateData.image_url = uploadResult.secure_url || uploadResult.url;
-    } else if (req.body.image_url === null || req.body.image_url === '') { // Allow removing image
-        updateData.image_url = null;
+      imageUrl = uploadResult.url;
     }
 
+    const updatedClass = await Class.findByIdAndUpdate(
+      req.params.id,
+      {
+        title,
+        description: description || '',
+        image_url: imageUrl,
+        updated_at: new Date()
+      },
+      { new: true }
+    ).populate('created_by', 'username email full_name profile_image');
 
-    await db().collection('classes').updateOne({ _id: classId }, { $set: updateData });
-    const updatedClass = await db().collection('classes').findOne({ _id: classId });
-    res.json(updatedClass);
+    const result = {
+      ...updatedClass.toObject(),
+      id: updatedClass._id,
+      creator_name: updatedClass.created_by?.username
+    };
+
+    res.json(result);
   } catch (error) {
     console.error('Error updating class:', error);
-    if (req.file) {
-        const fs = require('fs');
-        fs.unlink(req.file.path, err => {
-            if (err) console.error("Error deleting multer temp file:", err);
-        });
-    }
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -184,35 +218,29 @@ router.put('/:id', authenticate, authorize(['aslab']), upload.single('image'), a
 // Delete a class (aslab only)
 router.delete('/:id', authenticate, authorize(['aslab']), async (req, res) => {
   try {
-    if (!ObjectId.isValid(req.params.id)) {
-      return res.status(400).json({ message: 'Invalid class ID format' });
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: 'Invalid class ID' });
     }
-    const classId = new ObjectId(req.params.id);
 
-    const classDoc = await db().collection('classes').findOne({ _id: classId });
-    if (!classDoc) {
+    // Check if class exists
+    const classItem = await Class.findById(req.params.id);
+
+    if (!classItem) {
       return res.status(404).json({ message: 'Class not found' });
     }
 
-    if (classDoc.created_by.toString() !== req.user.id && req.user.role !== 'aslab') {
+    // Only allow the creator or an aslab to delete
+    if (classItem.created_by.toString() !== req.user.id && req.user.role !== 'aslab') {
       return res.status(403).json({ message: 'Not authorized to delete this class' });
     }
 
-    // Consider implications: delete related modules, assignments, enrollments, etc.
-    // This can be complex. For now, just deleting the class.
-    // Add transactions if these operations need to be atomic.
-    await db().collection('modules').deleteMany({ class_id: classId });
-    await db().collection('module_folders').deleteMany({ class_id: classId });
-    await db().collection('assignments').deleteMany({ class_id: classId });
-    await db().collection('class_enrollments').deleteMany({ class_id: classId });
-    // Potentially news items or social posts linked to this class
+    // Delete all enrollments for this class first
+    await ClassEnrollment.deleteMany({ class_id: req.params.id });
 
-    const result = await db().collection('classes').deleteOne({ _id: classId });
-    if (result.deletedCount === 0) {
-      return res.status(404).json({ message: 'Class not found or already deleted' });
-    }
+    // Delete the class
+    await Class.findByIdAndDelete(req.params.id);
 
-    res.json({ message: 'Class and related data deleted successfully' });
+    res.json({ message: 'Class deleted successfully' });
   } catch (error) {
     console.error('Error deleting class:', error);
     res.status(500).json({ message: 'Server error' });
@@ -222,36 +250,76 @@ router.delete('/:id', authenticate, authorize(['aslab']), async (req, res) => {
 // Enroll in a class (praktikan only)
 router.post('/:id/enroll', authenticate, authorize(['praktikan']), async (req, res) => {
   try {
-    if (!ObjectId.isValid(req.params.id)) {
-      return res.status(400).json({ message: 'Invalid class ID format' });
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: 'Invalid class ID' });
     }
-    const classId = new ObjectId(req.params.id);
-    const userId = new ObjectId(req.user.id);
 
-    const classExists = await db().collection('classes').findOne({ _id: classId });
-    if (!classExists) {
+    // Check if class exists
+    const classItem = await Class.findById(req.params.id);
+
+    if (!classItem) {
       return res.status(404).json({ message: 'Class not found' });
     }
 
-    const alreadyEnrolled = await db().collection('class_enrollments').findOne({
-      class_id: classId,
-      user_id: userId
+    // Check if already enrolled
+    const existingEnrollment = await ClassEnrollment.findOne({
+      class_id: req.params.id,
+      user_id: req.user.id
     });
 
-    if (alreadyEnrolled) {
+    if (existingEnrollment) {
       return res.status(400).json({ message: 'Already enrolled in this class' });
     }
 
-    const enrollment = {
-      class_id: classId,
-      user_id: userId,
-      enrolledAt: new Date()
-    };
-    await db().collection('class_enrollments').insertOne(enrollment);
+    // Create enrollment
+    const enrollment = new ClassEnrollment({
+      class_id: req.params.id,
+      user_id: req.user.id
+    });
+
+    await enrollment.save();
 
     res.status(201).json({ message: 'Enrolled successfully' });
   } catch (error) {
     console.error('Error enrolling in class:', error);
+    if (error.code === 11000) {
+      // Duplicate key error
+      return res.status(400).json({ message: 'Already enrolled in this class' });
+    }
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Unenroll from a class (praktikan only)
+router.delete('/:id/enroll', authenticate, authorize(['praktikan']), async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: 'Invalid class ID' });
+    }
+
+    // Check if class exists
+    const classItem = await Class.findById(req.params.id);
+
+    if (!classItem) {
+      return res.status(404).json({ message: 'Class not found' });
+    }
+
+    // Check if enrolled
+    const enrollment = await ClassEnrollment.findOne({
+      class_id: req.params.id,
+      user_id: req.user.id
+    });
+
+    if (!enrollment) {
+      return res.status(400).json({ message: 'Not enrolled in this class' });
+    }
+
+    // Remove enrollment
+    await ClassEnrollment.findByIdAndDelete(enrollment._id);
+
+    res.json({ message: 'Unenrolled successfully' });
+  } catch (error) {
+    console.error('Error unenrolling from class:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -259,45 +327,77 @@ router.post('/:id/enroll', authenticate, authorize(['praktikan']), async (req, r
 // Get enrolled classes for current user
 router.get('/enrolled/me', authenticate, async (req, res) => {
   try {
-    const userId = new ObjectId(req.user.id);
-    const enrollments = await db().collection('class_enrollments').aggregate([
-      { $match: { user_id: userId } },
-      {
-        $lookup: {
-          from: 'classes',
-          localField: 'class_id',
-          foreignField: '_id',
-          as: 'classInfo'
+    const enrollments = await ClassEnrollment.find({ user_id: req.user.id })
+      .populate({
+        path: 'class_id',
+        populate: {
+          path: 'created_by',
+          select: 'username email full_name profile_image'
         }
-      },
-      { $unwind: '$classInfo' },
-      {
-        $lookup: {
-          from: 'users',
-          localField: 'classInfo.created_by',
-          foreignField: '_id',
-          as: 'creatorInfo'
-        }
-      },
-      { $unwind: { path: '$creatorInfo', preserveNullAndEmptyArrays: true } },
-      {
-        $project: {
-          _id: '$classInfo._id',
-          title: '$classInfo.title',
-          description: '$classInfo.description',
-          image_url: '$classInfo.image_url',
-          createdAt: '$classInfo.createdAt',
-          updatedAt: '$classInfo.updatedAt',
-          creator_name: '$creatorInfo.username',
-          enrolledAt: '$enrolledAt'
-        }
-      },
-      { $sort: { enrolledAt: -1 } }
-    ]).toArray();
+      })
+      .sort({ enrolled_at: -1 })
+      .lean();
 
-    res.json(enrollments);
+    const result = enrollments.map(enrollment => ({
+      ...enrollment.class_id,
+      id: enrollment.class_id._id,
+      creator_name: enrollment.class_id.created_by?.username,
+      creator_email: enrollment.class_id.created_by?.email,
+      creator_full_name: enrollment.class_id.created_by?.full_name,
+      creator_profile_image: enrollment.class_id.created_by?.profile_image,
+      enrolled_at: enrollment.enrolled_at
+    }));
+
+    res.json(result);
   } catch (error) {
     console.error('Error fetching enrolled classes:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Get classes created by current user (aslab only)
+router.get('/created/me', authenticate, authorize(['aslab']), async (req, res) => {
+  try {
+    const classes = await Class.find({ created_by: req.user.id })
+      .populate('created_by', 'username email full_name profile_image')
+      .populate('enrollment_count')
+      .sort({ created_at: -1 })
+      .lean();
+
+    const result = classes.map(classItem => ({
+      ...classItem,
+      id: classItem._id,
+      creator_name: classItem.created_by?.username,
+      creator_email: classItem.created_by?.email,
+      creator_full_name: classItem.created_by?.full_name,
+      creator_profile_image: classItem.created_by?.profile_image
+    }));
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error fetching created classes:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Check enrollment status for a class
+router.get('/:id/enrollment-status', authenticate, async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: 'Invalid class ID' });
+    }
+
+    const enrollment = await ClassEnrollment.findOne({
+      class_id: req.params.id,
+      user_id: req.user.id
+    });
+
+    res.json({
+      enrolled: !!enrollment,
+      enrollment_date: enrollment?.enrolled_at || null
+    });
+  } catch (error) {
+    console.error('Error checking enrollment status:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

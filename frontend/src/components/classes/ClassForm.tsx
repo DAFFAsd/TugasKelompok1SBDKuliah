@@ -19,7 +19,6 @@ const ClassForm = ({ isEditing = false }: ClassFormProps) => {
   const [description, setDescription] = useState('');
   const [image, setImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  // We need this state for tracking the current image URL from the server
   const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);

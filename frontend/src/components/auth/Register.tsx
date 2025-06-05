@@ -35,7 +35,7 @@ const Register = () => {
 
     // Validate aslab code if role is aslab
     if (role === 'aslab') {
-      if (aslabCode !== 'fairuzganteng69') {
+      if (aslabCode !== 'digilab2025') {
         setFormError('Invalid aslab code');
         return;
       }

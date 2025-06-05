@@ -19,7 +19,7 @@ const getDeadlineStatusClass = (deadline: string) => {
   const deadlineDate = new Date(deadline);
   const diffTime = deadlineDate.getTime() - now.getTime();
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
+  
   if (diffDays <= 0) {
     return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'; // Passed
   } else if (diffDays <= 1) {
@@ -36,15 +36,15 @@ const getRemainingTimeText = (deadline: string): string => {
   const now = new Date();
   const deadlineDate = new Date(deadline);
   const diffTime = deadlineDate.getTime() - now.getTime();
-
+  
   // If deadline has passed
   if (diffTime <= 0) {
     return "Passed";
   }
-
+  
   const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
   const diffHours = Math.floor((diffTime % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-
+  
   if (diffDays > 0) {
     return `${diffDays} day${diffDays > 1 ? 's' : ''} left`;
   } else {
@@ -53,17 +53,17 @@ const getRemainingTimeText = (deadline: string): string => {
 };
 
 interface Class {
-  id: string;
+  id: number;
   title: string;
   description: string;
   creator_name: string;
-  created_by: string;
+  created_by: number;
   created_at: string;
   updated_at: string;
 }
 
 interface Module {
-  id: string;
+  id: number;
   title: string;
   content: string;
   creator_name: string;
@@ -71,7 +71,7 @@ interface Module {
 }
 
 interface Assignment {
-  id: string;
+  id: number;
   title: string;
   description: string;
   deadline: string;
@@ -85,7 +85,6 @@ const ClassDetail = () => {
   const { user } = useAuth();
 
   const [classData, setClassData] = useState<Class | null>(null);
-  // We need to keep this state even if not directly used as it's populated in fetchClassData
   const [modules, setModules] = useState<Module[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [activeTab, setActiveTab] = useState<'modules' | 'assignments'>('modules');
@@ -93,16 +92,6 @@ const ClassDetail = () => {
   const [error, setError] = useState<string | null>(null);
   const [isEnrolled, setIsEnrolled] = useState(false);
   const [enrolling, setEnrolling] = useState(false);
-
-  if (!id) {
-    return (
-      <div className="container-custom py-8">
-        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-400 dark:border-yellow-800 text-yellow-700 dark:text-yellow-400 px-4 py-3 rounded relative" role="alert">
-          <span className="block sm:inline">Class ID is required</span>
-        </div>
-      </div>
-    );
-  }
 
   useEffect(() => {
     const fetchClassData = async () => {
@@ -119,7 +108,7 @@ const ClassDetail = () => {
           try {
             const enrolledResponse = await axios.get(`${API_URL}/classes/enrolled/me`);
             const enrolledIds = enrolledResponse.data.map((c: Class) => c.id);
-            setIsEnrolled(enrolledIds.includes(id));
+            setIsEnrolled(enrolledIds.includes(Number(id)));
           } catch (err) {
             console.error('Error checking enrollment:', err);
           }
@@ -210,7 +199,7 @@ const ClassDetail = () => {
     );
   }
 
-  const isCreator = user && user._id === classData.created_by;
+  const isCreator = user && user.id === classData.created_by;
   const canEdit = user && (user.role === 'aslab' || isCreator);
   const canAccess = isEnrolled || canEdit;
 
@@ -270,7 +259,7 @@ const ClassDetail = () => {
             {canEdit && (
               <CreateAnnouncementButton
                 entityType="class"
-                entityid={classData.id}
+                entityId={classData.id}
                 entityTitle={classData.title}
               />
             )}
@@ -340,7 +329,7 @@ const ClassDetail = () => {
                 <h2 className="text-xl font-semibold text-secondary-900 dark:text-dark-text">Modules</h2>
               </div>
 
-              <ModuleManager classid={id} canEdit={canEdit} />
+              <ModuleManager classId={Number(id)} canEdit={canEdit} />
             </div>
           )}
 

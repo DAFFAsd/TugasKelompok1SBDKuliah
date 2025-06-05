@@ -6,30 +6,30 @@ import { useAuth } from '../../context/AuthContext';
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 interface Comment {
-  id: string;
+  id: number;
   content: string;
   created_at: string;
-  user_id: string;
+  user_id: number;
   username: string;
 }
 
 interface CommentListProps {
   comments: Comment[];
-  postid: string;
-  onCommentDeleted: (commentid: string) => void;
+  postId: number;
+  onCommentDeleted: (commentId: number) => void;
 }
 
-const CommentList = ({ comments, postid, onCommentDeleted }: CommentListProps) => {
+const CommentList = ({ comments, postId, onCommentDeleted }: CommentListProps) => {
   const { user } = useAuth();
 
-  const handleDeleteComment = async (commentid: string) => {
+  const handleDeleteComment = async (commentId: number) => {
     if (!window.confirm('Are you sure you want to delete this comment?')) {
       return;
     }
-
+    
     try {
-      await axios.delete(`${API_URL}/social/comments/${commentid}`);
-      onCommentDeleted(commentid);
+      await axios.delete(`${API_URL}/social/comments/${commentId}`);
+      onCommentDeleted(commentId);
     } catch (error) {
       console.error('Error deleting comment:', error);
     }
@@ -46,8 +46,8 @@ const CommentList = ({ comments, postid, onCommentDeleted }: CommentListProps) =
   return (
     <div className="space-y-3">
       {comments.map(comment => (
-        <div
-          key={comment.id}
+        <div 
+          key={comment.id} 
           className="flex space-x-2"
         >
           <div className="h-8 w-8 rounded-full bg-secondary-100 dark:bg-gray-700 flex items-center justify-center text-secondary-700 dark:text-dark-text font-bold text-sm">
@@ -67,8 +67,8 @@ const CommentList = ({ comments, postid, onCommentDeleted }: CommentListProps) =
                 {comment.content}
               </p>
             </div>
-
-            {user?._id === comment.user_id && (
+            
+            {user?.id === comment.user_id && (
               <div className="mt-1 flex justify-end">
                 <button
                   onClick={() => handleDeleteComment(comment.id)}

@@ -12,17 +12,17 @@ import 'katex/dist/katex.min.css';
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 interface Assignment {
-  id: string;
+  id: number;
   title: string;
   description: string;
   deadline: string;
-  class_id: string;
+  class_id: number;
   class_title: string;
   creator_name: string;
 }
 
 interface Submission {
-  id: string;
+  id: number;
   content: string;
   file_url: string;
   submitted_at: string;

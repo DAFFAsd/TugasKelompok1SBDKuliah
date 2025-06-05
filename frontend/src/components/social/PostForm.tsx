@@ -6,6 +6,17 @@ import ImagePasteHandler from '../common/ImagePasteHandler';
 // API URL from environment
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
+interface Post {
+  id: number;
+  content: string;
+  image_url: string | null;
+  created_at: string;
+  updated_at: string;
+  user_id: number;
+  username: string;
+  comment_count: number;
+}
+
 interface PostFormProps {
   onPostCreated: () => void;
   initialContent?: string;
@@ -13,7 +24,10 @@ interface PostFormProps {
   initialEntityType?: string;
   initialEntityId?: string;
   isEditing?: boolean;
+  post?: Post; // Add this line
   postId?: number;
+  onPostUpdated?: () => void; // Add this if needed
+  onCancel?: () => void; // Add this if needed
 }
 
 interface ClassOption {
@@ -41,11 +55,11 @@ interface AssignmentOption {
   class_id: number;
 }
 
-const PostForm = ({
-  onPostCreated,
-  initialContent = '',
-  initialImageUrl = null,
-  initialEntityType = '',
+const PostForm = ({ 
+  onPostCreated, 
+  initialContent = '', 
+  initialImageUrl = null, 
+  initialEntityType = '', 
   initialEntityId = '',
   isEditing = false,
   postId
@@ -58,7 +72,7 @@ const PostForm = ({
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isExpanded, setIsExpanded] = useState(false);
-
+  
   // Linked entity options
   const [linkedType, setLinkedType] = useState<'class' | 'module' | 'assignment' | ''>(
     initialEntityType as 'class' | 'module' | 'assignment' | ''
@@ -66,7 +80,7 @@ const PostForm = ({
   const [linkedId, setLinkedId] = useState<string>(initialEntityId);
   const [selectedClassId, setSelectedClassId] = useState<string>('');
   const [selectedFolderId, setSelectedFolderId] = useState<string>('');
-
+  
   // Data for hierarchical dropdowns
   const [classes, setClasses] = useState<ClassOption[]>([]);
   const [moduleFolders, setModuleFolders] = useState<ModuleFolderOption[]>([]);
@@ -85,7 +99,7 @@ const PostForm = ({
   useEffect(() => {
     if (showEntityOptions) {
       fetchClasses();
-
+      
       // If we're editing and have linked entities, fetch the relevant data
       if (isEditing && linkedType && linkedId) {
         if (linkedType === 'module' || linkedType === 'assignment') {
@@ -116,7 +130,7 @@ const PostForm = ({
           setSelectedFolderId(moduleData.folder_id.toString());
         }
         console.log(`Fetched module details: class_id=${moduleData.class_id}, folder_id=${moduleData.folder_id}`);
-
+        
         // Now fetch folders and modules for this class
         if (moduleData.class_id) {
           fetchModuleFoldersForClass(moduleData.class_id.toString());
@@ -126,7 +140,7 @@ const PostForm = ({
         const assignmentData = response.data;
         setSelectedClassId(assignmentData.class_id.toString());
         console.log(`Fetched assignment details: class_id=${assignmentData.class_id}`);
-
+        
         // Now fetch assignments for this class
         if (assignmentData.class_id) {
           fetchModuleFoldersForClass(assignmentData.class_id.toString());
@@ -142,9 +156,9 @@ const PostForm = ({
     setLoadingOptions(true);
     try {
       const response = await axios.get(`${API_URL}/classes`);
-      setClasses(response.data.map((c: any) => ({
-        id: c.id,
-        title: c.title
+      setClasses(response.data.map((c: any) => ({ 
+        id: c.id, 
+        title: c.title 
       })));
     } catch (err) {
       console.error('Error fetching classes:', err);
@@ -157,7 +171,7 @@ const PostForm = ({
   // Fetch module folders for a specific class
   const fetchModuleFoldersForClass = async (classId: string) => {
     if (!classId) return;
-
+    
     setLoadingOptions(true);
     try {
       // Fetch folders for the selected class
@@ -168,7 +182,7 @@ const PostForm = ({
         class_id: f.class_id,
         modules: [] // Will be populated later
       }));
-
+      
       // Fetch modules for the selected class
       const modulesResponse = await axios.get(`${API_URL}/modules/class/${classId}`);
       const modulesData = modulesResponse.data.map((m: any) => ({
@@ -177,7 +191,7 @@ const PostForm = ({
         folder_id: m.folder_id,
         class_id: m.class_id
       }));
-
+      
       // Group modules by folder
       const modulesByFolder = modulesData.reduce((acc: any, module: ModuleOption) => {
         if (module.folder_id) {
@@ -186,7 +200,7 @@ const PostForm = ({
         }
         return acc;
       }, {});
-
+      
       // Add modules to their respective folders
       const foldersWithModules = folders.map((folder: ModuleFolderOption) => {
         return {
@@ -194,10 +208,10 @@ const PostForm = ({
           modules: modulesByFolder[folder.id] || []
         };
       });
-
+      
       setModuleFolders(foldersWithModules);
       setModules(modulesData);
-
+      
       // Fetch assignments for the selected class
       const assignmentsResponse = await axios.get(`${API_URL}/assignments/class/${classId}`);
       setAssignments(assignmentsResponse.data.map((a: any) => ({
@@ -219,14 +233,14 @@ const PostForm = ({
     console.log(`Selected class ID: ${newClassId}`);
     setSelectedClassId(newClassId);
     setSelectedFolderId('');
-
+    
     if (linkedType === 'class') {
       setLinkedId(newClassId);
       console.log(`Setting linkedId to ${newClassId} for class`);
     } else {
       setLinkedId(''); // Reset linked ID when changing class for module/assignment
     }
-
+    
     if (newClassId) {
       fetchModuleFoldersForClass(newClassId);
     }
@@ -237,13 +251,13 @@ const PostForm = ({
     const newType = e.target.value as 'class' | 'module' | 'assignment' | '';
     setLinkedType(newType);
   };
-
+  
   // Handle module selection through hierarchy
   const handleModuleSelection = (moduleId: string) => {
     console.log(`Selected module ID: ${moduleId}`);
     setLinkedId(moduleId);
   };
-
+  
   // Handle assignment selection
   const handleAssignmentChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const assignmentId = e.target.value;
@@ -262,7 +276,7 @@ const PostForm = ({
         }
         return;
       }
-
+      
       setImage(file);
 
       // Create a preview URL
@@ -284,46 +298,47 @@ const PostForm = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
+    
     if (!content.trim()) {
       setError('Please enter some content for your post');
       return;
     }
-
+    
     try {
       setLoading(true);
       setError(null);
-
+      
       // Create FormData object to handle file upload
       const formData = new FormData();
       formData.append('content', content);
       if (image) {
         formData.append('image', image);
       }
-
+      
       // Add entity linking information if provided
       if (linkedType && linkedId) {
         formData.append('entityType', linkedType);
         formData.append('entityId', linkedId);
       }
-
-      // Send the request to the server
+      
+      let response;
+      
       if (isEditing && postId) {
         // Update existing post
-        await axios.put(`${API_URL}/social/posts/${postId}`, formData, {
+        response = await axios.put(`${API_URL}/social/posts/${postId}`, formData, {
           headers: {
             'Content-Type': 'multipart/form-data'
           }
         });
       } else {
         // Create new post
-        await axios.post(`${API_URL}/social/posts`, formData, {
+        response = await axios.post(`${API_URL}/social/posts`, formData, {
           headers: {
             'Content-Type': 'multipart/form-data'
           }
         });
       }
-
+      
       // Reset form
       setContent('');
       setImage(null);
@@ -334,11 +349,11 @@ const PostForm = ({
       setSelectedFolderId('');
       setIsExpanded(false);
       setShowEntityOptions(false);
-
+      
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
-
+      
       // Notify parent component
       onPostCreated();
     } catch (err: any) {
@@ -352,7 +367,7 @@ const PostForm = ({
   // Render the hierarchical entity selection based on linked type
   const renderEntitySelection = () => {
     if (!linkedType) return null;
-
+    
     return (
       <div className="mt-3 space-y-3">
         {/* Class selection - always shown for all entity types */}
@@ -379,7 +394,7 @@ const PostForm = ({
             <label className="block text-sm font-medium text-secondary-700 dark:text-dark-text mb-1">
               Select Module
             </label>
-
+            
             {loadingOptions ? (
               <div className="p-3 text-center text-secondary-500 dark:text-dark-muted border border-secondary-300 dark:border-dark-border rounded-md">
                 Loading modules...
@@ -397,7 +412,7 @@ const PostForm = ({
                     <div className="pl-4 space-y-1">
                       {folder.modules.map(module => (
                         <div key={module.id} className="flex items-center">
-                          <input
+                          <input 
                             type="radio"
                             id={`module-${module.id}`}
                             name="module"
@@ -406,7 +421,7 @@ const PostForm = ({
                             onChange={() => handleModuleSelection(module.id.toString())}
                             className="h-4 w-4 text-primary-600 focus:ring-primary-500 dark:bg-gray-700 dark:border-dark-border"
                           />
-                          <label
+                          <label 
                             htmlFor={`module-${module.id}`}
                             className="ml-2 text-sm text-secondary-700 dark:text-dark-text cursor-pointer"
                           >
@@ -420,7 +435,7 @@ const PostForm = ({
                     </div>
                   </div>
                 ))}
-
+                
                 {/* Modules without folders */}
                 {modules.filter(m => !m.folder_id).length > 0 && (
                   <div className="p-2">
@@ -428,7 +443,7 @@ const PostForm = ({
                     <div className="pl-4 space-y-1">
                       {modules.filter(m => !m.folder_id).map(module => (
                         <div key={module.id} className="flex items-center">
-                          <input
+                          <input 
                             type="radio"
                             id={`module-${module.id}`}
                             name="module"
@@ -437,7 +452,7 @@ const PostForm = ({
                             onChange={() => handleModuleSelection(module.id.toString())}
                             className="h-4 w-4 text-primary-600 focus:ring-primary-500 dark:bg-gray-700 dark:border-dark-border"
                           />
-                          <label
+                          <label 
                             htmlFor={`module-${module.id}`}
                             className="ml-2 text-sm text-secondary-700 dark:text-dark-text cursor-pointer"
                           >
@@ -492,7 +507,7 @@ const PostForm = ({
       {error && (
         <div className="mb-3 bg-red-50 dark:bg-red-900/20 border border-red-400 dark:border-red-800 text-red-700 dark:text-red-400 px-3 py-2 rounded-md text-sm">
           {error}
-          <button
+          <button 
             className="float-right"
             onClick={() => setError(null)}
             aria-label="Dismiss"
@@ -503,7 +518,7 @@ const PostForm = ({
           </button>
         </div>
       )}
-
+      
       <form onSubmit={handleSubmit}>
         <div className="mb-3">
           <ImagePasteHandler
@@ -511,13 +526,13 @@ const PostForm = ({
               // Insert placeholder at cursor position
               const textarea = document.getElementById('post-content') as HTMLTextAreaElement;
               const uploadingText = '![Uploading image...]()'
-
+              
               if (textarea) {
                 const start = textarea.selectionStart;
                 const end = textarea.selectionEnd;
                 const newContent = content.substring(0, start) + uploadingText + content.substring(end);
                 setContent(newContent);
-
+                
                 // Store cursor position for later
                 textarea.dataset.uploadStart = start.toString();
               } else {
@@ -529,19 +544,19 @@ const PostForm = ({
               const textarea = document.getElementById('post-content') as HTMLTextAreaElement;
               const uploadingText = '![Uploading image...]()'
               const imageMarkdown = `![image](${imageUrl})`;
-
+              
               if (textarea) {
                 const uploadStart = parseInt(textarea.dataset.uploadStart || '0');
                 const currentContent = content;
                 const placeholderIndex = currentContent
                   .indexOf(uploadingText, uploadStart > 0 ? uploadStart - uploadingText.length : 0);
-
+                
                 if (placeholderIndex !== -1) {
-                  const newContent = currentContent.substring(0, placeholderIndex) +
-                    imageMarkdown +
+                  const newContent = currentContent.substring(0, placeholderIndex) + 
+                    imageMarkdown + 
                     currentContent.substring(placeholderIndex + uploadingText.length);
                   setContent(newContent);
-
+                  
                   // Reset cursor position after content update
                   setTimeout(() => {
                     textarea.focus();
@@ -569,18 +584,18 @@ const PostForm = ({
           </ImagePasteHandler>
           {isExpanded && (
             <div className="mt-1 text-xs text-secondary-500 dark:text-dark-muted">
-              <span className="font-medium">Pro tip:</span> You can use Markdown formatting - **bold**, *italic*,
+              <span className="font-medium">Pro tip:</span> You can use Markdown formatting - **bold**, *italic*, 
               [links](url), # headings, and more!
             </div>
           )}
         </div>
-
+        
         {isExpanded && (
           <>
             {/* Image upload and preview */}
             {imagePreview ? (
               <div className="mb-3 relative">
-                <img
+                <img 
                   src={imagePreview}
                   alt="Upload Preview"
                   className="w-full h-auto rounded-md max-h-40 object-cover"
@@ -596,7 +611,7 @@ const PostForm = ({
                 </button>
               </div>
             ) : null}
-
+            
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center py-2 mb-3 border-t border-b border-secondary-200 dark:border-dark-border">
               <div className="flex mb-2 sm:mb-0">
                 {/* Image upload button */}
@@ -614,7 +629,7 @@ const PostForm = ({
                     onChange={handleImageChange}
                   />
                 </label>
-
+                
                 {/* Entity link toggle button */}
                 <button
                   type="button"
@@ -627,7 +642,7 @@ const PostForm = ({
                   Link
                 </button>
               </div>
-
+              
               <div className="flex justify-end">
                 <button
                   type="button"
@@ -666,7 +681,7 @@ const PostForm = ({
                 </button>
               </div>
             </div>
-
+            
             {/* Entity linking section */}
             {showEntityOptions && (
               <div className="mb-3 p-3 bg-secondary-50 dark:bg-gray-700 rounded-md border border-secondary-200 dark:border-dark-border">
@@ -685,7 +700,7 @@ const PostForm = ({
                     <option value="assignment">Link to an Assignment</option>
                   </select>
                 </div>
-
+                
                 {renderEntitySelection()}
               </div>
             )}

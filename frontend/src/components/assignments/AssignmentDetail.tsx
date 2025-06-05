@@ -51,11 +51,11 @@ const getRemainingTimeText = (deadline: string): string => {
 };
 
 interface Assignment {
-  id: string;
+  id: number;
   title: string;
   description: string;
   deadline: string;
-  class_id: string;
+  class_id: number;
   class_title: string;
   creator_name: string;
   created_at: string;
@@ -63,7 +63,7 @@ interface Assignment {
 }
 
 interface Submission {
-  id: string;
+  id: number;
   content: string;
   file_url: string;
   submitted_at: string;

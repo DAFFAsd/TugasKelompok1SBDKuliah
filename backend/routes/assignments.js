@@ -2,54 +2,32 @@ const express = require('express');
 const multer = require('multer');
 const { authenticate, authorize } = require('../middleware/auth');
 const { uploadFile } = require('../config/cloudinary');
-const { getDb, ObjectId } = require('../db');
+const { Assignment, Submission, Grade, ClassEnrollment } = require('../models/assignment.model');
+const User = require('../models/user.model'); // Assuming User model exists
+const Class = require('../models/class.model'); // Assuming Class model exists
 
 const router = express.Router();
 
 // Configure multer for file uploads
-const upload = multer({ dest: 'uploads/' }); // Consider using memoryStorage for Cloudinary
+const upload = multer({ dest: 'uploads/' });
 
 // Maximum number of files allowed per upload
 const MAX_FILES = 5;
 
-// Helper function to get DB instance
-const db = () => getDb();
-
 // Get all assignments for a class
 router.get('/class/:classId', async (req, res) => {
   try {
-    if (!ObjectId.isValid(req.params.classId)) {
-      return res.status(400).json({ message: 'Invalid class ID format' });
-    }
-    const classId = new ObjectId(req.params.classId);
+    const assignments = await Assignment.find({ class_id: req.params.classId })
+      .populate('created_by', 'username')
+      .sort({ deadline: 1 });
 
-    const assignments = await db().collection('assignments').aggregate([
-      { $match: { class_id: classId } },
-      {
-        $lookup: {
-          from: 'users',
-          localField: 'created_by',
-          foreignField: '_id',
-          as: 'creator'
-        }
-      },
-      { $unwind: { path: '$creator', preserveNullAndEmptyArrays: true } },
-      {
-        $project: {
-          title: 1,
-          description: 1,
-          deadline: 1,
-          class_id: 1,
-          created_by: 1,
-          createdAt: 1,
-          updatedAt: 1,
-          creator_name: '$creator.username'
-        }
-      },
-      { $sort: { deadline: 1 } }
-    ]).toArray();
+    // Transform data to match original structure
+    const transformedAssignments = assignments.map(assignment => ({
+      ...assignment.toObject(),
+      creator_name: assignment.created_by.username
+    }));
 
-    res.json(assignments);
+    res.json(transformedAssignments);
   } catch (error) {
     console.error('Error fetching assignments:', error);
     res.status(500).json({ message: 'Server error' });
@@ -60,78 +38,47 @@ router.get('/class/:classId', async (req, res) => {
 router.get('/upcoming', authenticate, async (req, res) => {
   try {
     const limit = req.query.limit ? parseInt(req.query.limit) : 5;
-    const userId = new ObjectId(req.user.id); // Assuming req.user.id is the string representation of ObjectId
+    console.log(`Fetching upcoming assignments for user ${req.user.id} with role ${req.user.role}`);
 
-    // Get classes the user is enrolled in
-    const enrollments = await db().collection('class_enrollments').find({ user_id: userId }).toArray();
-    if (enrollments.length === 0) {
+    // First check if the user is enrolled in any classes
+    const enrollmentCount = await ClassEnrollment.countDocuments({ user_id: req.user.id });
+    console.log(`User has ${enrollmentCount} class enrollments`);
+
+    if (enrollmentCount === 0) {
+      console.log('User is not enrolled in any classes, returning empty array');
       return res.json([]);
     }
-    const enrolledClassIds = enrollments.map(e => e.class_id);
 
-    let pipeline = [
-      {
-        $match: {
-          class_id: { $in: enrolledClassIds },
-          deadline: { $gt: new Date() }
-        }
-      },
-      {
-        $lookup: {
-          from: 'classes',
-          localField: 'class_id',
-          foreignField: '_id',
-          as: 'classInfo'
-        }
-      },
-      { $unwind: { path: '$classInfo', preserveNullAndEmptyArrays: true } },
-    ];
+    // Get user's enrolled classes
+    const enrollments = await ClassEnrollment.find({ user_id: req.user.id }).select('class_id');
+    const classIds = enrollments.map(enrollment => enrollment.class_id);
 
+    let assignmentQuery = {
+      class_id: { $in: classIds },
+      deadline: { $gt: new Date() }
+    };
+
+    // For praktikan, exclude assignments that have already been submitted
     if (req.user.role === 'praktikan') {
-      pipeline.push(
-        {
-          $lookup: {
-            from: 'submissions',
-            let: { assignmentId: '$_id', userId: userId },
-            pipeline: [
-              {
-                $match: {
-                  $expr: {
-                    $and: [
-                      { $eq: ['$assignment_id', '$$assignmentId'] },
-                      { $eq: ['$user_id', '$$userId'] }
-                    ]
-                  }
-                }
-              }
-            ],
-            as: 'submission'
-          }
-        },
-        { $match: { submission: { $size: 0 } } } // Only assignments not submitted
-      );
+      const submittedAssignments = await Submission.find({ user_id: req.user.id }).select('assignment_id');
+      const submittedAssignmentIds = submittedAssignments.map(sub => sub.assignment_id);
+      
+      assignmentQuery._id = { $nin: submittedAssignmentIds };
     }
 
-    pipeline.push(
-      { $sort: { deadline: 1 } },
-      { $limit: limit },
-      {
-        $project: {
-          title: 1,
-          description: 1,
-          deadline: 1,
-          class_id: 1,
-          createdAt: 1,
-          updatedAt: 1,
-          class_title: '$classInfo.title',
-          // submission: 0 // Exclude submission array from final output if not needed
-        }
-      }
-    );
+    const assignments = await Assignment.find(assignmentQuery)
+      .populate('class_id', 'title')
+      .sort({ deadline: 1 })
+      .limit(limit);
 
-    const assignments = await db().collection('assignments').aggregate(pipeline).toArray();
-    res.json(assignments);
+    // Transform data to match original structure
+    const transformedAssignments = assignments.map(assignment => ({
+      ...assignment.toObject(),
+      class_title: assignment.class_id.title
+    }));
 
+    console.log(`Found ${transformedAssignments.length} upcoming assignments`);
+    res.json(transformedAssignments);
   } catch (error) {
     console.error('Error fetching upcoming assignments:', error);
     res.status(500).json({ message: 'Server error' });
@@ -141,50 +88,22 @@ router.get('/upcoming', authenticate, async (req, res) => {
 // Get an assignment by ID
 router.get('/:id', async (req, res) => {
   try {
-    if (!ObjectId.isValid(req.params.id)) {
-      return res.status(400).json({ message: 'Invalid assignment ID format' });
-    }
-    const assignmentId = new ObjectId(req.params.id);
-
-    const assignment = await db().collection('assignments').aggregate([
-      { $match: { _id: assignmentId } },
-      {
-        $lookup: {
-          from: 'users',
-          localField: 'created_by',
-          foreignField: '_id',
-          as: 'creator'
-        }
-      },
-      { $unwind: { path: '$creator', preserveNullAndEmptyArrays: true } },
-      {
-        $lookup: {
-          from: 'classes',
-          localField: 'class_id',
-          foreignField: '_id',
-          as: 'classInfo'
-        }
-      },
-      { $unwind: { path: '$classInfo', preserveNullAndEmptyArrays: true } },
-      {
-        $project: {
-          title: 1,
-          description: 1,
-          deadline: 1,
-          class_id: 1,
-          created_by: 1,
-          createdAt: 1,
-          updatedAt: 1,
-          creator_name: '$creator.username',
-          class_title: '$classInfo.title'
-        }
-      }
-    ]).next(); // Use next() for findOne equivalent in aggregation
+    const assignment = await Assignment.findById(req.params.id)
+      .populate('created_by', 'username')
+      .populate('class_id', 'title');
 
     if (!assignment) {
       return res.status(404).json({ message: 'Assignment not found' });
     }
-    res.json(assignment);
+
+    // Transform data to match original structure
+    const transformedAssignment = {
+      ...assignment.toObject(),
+      creator_name: assignment.created_by.username,
+      class_title: assignment.class_id.title
+    };
+
+    res.json(transformedAssignment);
   } catch (error) {
     console.error('Error fetching assignment:', error);
     res.status(500).json({ message: 'Server error' });
@@ -199,29 +118,23 @@ router.post('/', authenticate, authorize(['aslab']), async (req, res) => {
     if (!class_id || !title || !description || !deadline) {
       return res.status(400).json({ message: 'Class ID, title, description, and deadline are required' });
     }
-    if (!ObjectId.isValid(class_id)) {
-      return res.status(400).json({ message: 'Invalid Class ID format' });
-    }
 
-    const classExists = await db().collection('classes').findOne({ _id: new ObjectId(class_id) });
+    // Check if class exists
+    const classExists = await Class.findById(class_id);
     if (!classExists) {
       return res.status(404).json({ message: 'Class not found' });
     }
 
-    const newAssignment = {
-      class_id: new ObjectId(class_id),
+    const assignment = new Assignment({
+      class_id,
       title,
       description,
-      deadline: new Date(deadline),
-      created_by: new ObjectId(req.user.id),
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
+      deadline,
+      created_by: req.user.id
+    });
 
-    const result = await db().collection('assignments').insertOne(newAssignment);
-    const insertedAssignment = await db().collection('assignments').findOne({ _id: result.insertedId });
-
-    res.status(201).json(insertedAssignment);
+    const savedAssignment = await assignment.save();
+    res.status(201).json(savedAssignment);
   } catch (error) {
     console.error('Error creating assignment:', error);
     res.status(500).json({ message: 'Server error' });
@@ -232,41 +145,28 @@ router.post('/', authenticate, authorize(['aslab']), async (req, res) => {
 router.put('/:id', authenticate, authorize(['aslab']), async (req, res) => {
   try {
     const { title, description, deadline } = req.body;
-    if (!ObjectId.isValid(req.params.id)) {
-      return res.status(400).json({ message: 'Invalid assignment ID format' });
-    }
-    const assignmentId = new ObjectId(req.params.id);
 
     if (!title || !description || !deadline) {
       return res.status(400).json({ message: 'Title, description, and deadline are required' });
     }
 
-    const assignment = await db().collection('assignments').findOne({ _id: assignmentId });
+    // Check if assignment exists
+    const assignment = await Assignment.findById(req.params.id);
     if (!assignment) {
       return res.status(404).json({ message: 'Assignment not found' });
     }
 
-    // In MongoDB, req.user.id should be a string, convert assignment.created_by to string for comparison
+    // Only allow the creator or an aslab to update
     if (assignment.created_by.toString() !== req.user.id && req.user.role !== 'aslab') {
       return res.status(403).json({ message: 'Not authorized to update this assignment' });
     }
 
-    const updateData = {
-      title,
-      description,
-      deadline: new Date(deadline),
-      updatedAt: new Date()
-    };
-
-    const result = await db().collection('assignments').updateOne(
-      { _id: assignmentId },
-      { $set: updateData }
+    const updatedAssignment = await Assignment.findByIdAndUpdate(
+      req.params.id,
+      { title, description, deadline },
+      { new: true }
     );
 
-    if (result.matchedCount === 0) {
-        return res.status(404).json({ message: 'Assignment not found' });
-    }
-    const updatedAssignment = await db().collection('assignments').findOne({ _id: assignmentId });
     res.json(updatedAssignment);
   } catch (error) {
     console.error('Error updating assignment:', error);
@@ -277,29 +177,18 @@ router.put('/:id', authenticate, authorize(['aslab']), async (req, res) => {
 // Delete an assignment (aslab only)
 router.delete('/:id', authenticate, authorize(['aslab']), async (req, res) => {
   try {
-    if (!ObjectId.isValid(req.params.id)) {
-      return res.status(400).json({ message: 'Invalid assignment ID format' });
-    }
-    const assignmentId = new ObjectId(req.params.id);
-
-    const assignment = await db().collection('assignments').findOne({ _id: assignmentId });
+    // Check if assignment exists
+    const assignment = await Assignment.findById(req.params.id);
     if (!assignment) {
       return res.status(404).json({ message: 'Assignment not found' });
     }
 
+    // Only allow the creator or an aslab to delete
     if (assignment.created_by.toString() !== req.user.id && req.user.role !== 'aslab') {
       return res.status(403).json({ message: 'Not authorized to delete this assignment' });
     }
 
-    // Also delete related submissions and grades
-    await db().collection('submissions').deleteMany({ assignment_id: assignmentId });
-    // Assuming grades are linked to submissions, they might be deleted via cascade or need explicit deletion if linked to assignments
-    // For now, let's assume submissions deletion is enough or grades are embedded/handled elsewhere.
-
-    const result = await db().collection('assignments').deleteOne({ _id: assignmentId });
-    if (result.deletedCount === 0) {
-      return res.status(404).json({ message: 'Assignment not found or already deleted' });
-    }
+    await Assignment.findByIdAndDelete(req.params.id);
 
     res.json({ message: 'Assignment deleted successfully' });
   } catch (error) {
@@ -311,212 +200,180 @@ router.delete('/:id', authenticate, authorize(['aslab']), async (req, res) => {
 // Submit an assignment (praktikan only)
 router.post('/:id/submit', authenticate, authorize(['praktikan']), upload.array('files', MAX_FILES), async (req, res) => {
   try {
-    if (!ObjectId.isValid(req.params.id)) {
-      return res.status(400).json({ message: 'Invalid assignment ID format' });
-    }
-    const assignmentId = new ObjectId(req.params.id);
-    const userId = new ObjectId(req.user.id);
+    const { content, existingFiles } = req.body;
+    const files = req.files;
 
-    const { content, existingFiles: existingFilesJson } = req.body; // existingFiles is expected to be JSON string
-    const newFiles = req.files;
-
-    const assignment = await db().collection('assignments').findOne({ _id: assignmentId });
+    // Check if assignment exists
+    const assignment = await Assignment.findById(req.params.id);
     if (!assignment) {
       return res.status(404).json({ message: 'Assignment not found' });
     }
 
-    if (new Date() > new Date(assignment.deadline)) {
+    // Check if deadline has passed
+    const now = new Date();
+    if (now > assignment.deadline) {
       return res.status(400).json({ message: 'Deadline has passed' });
     }
 
-    let currentFileUrls = [];
-    if (existingFilesJson) {
+    // Process file uploads and store URLs
+    let fileUrls = [];
+
+    // Add existing files that weren't removed
+    if (existingFiles) {
       try {
-        currentFileUrls = JSON.parse(existingFilesJson);
-        if (!Array.isArray(currentFileUrls)) currentFileUrls = [];
+        const parsedExistingFiles = JSON.parse(existingFiles);
+        if (Array.isArray(parsedExistingFiles)) {
+          fileUrls = [...parsedExistingFiles];
+        }
       } catch (e) {
-        console.warn('Error parsing existingFiles JSON:', e);
-        currentFileUrls = []; // Reset if parsing fails
+        console.error('Error parsing existing files:', e);
       }
     }
-    
-    let uploadedFileUrls = [];
-    if (newFiles && newFiles.length > 0) {
-      if (currentFileUrls.length + newFiles.length > MAX_FILES) {
+
+    // Add new files
+    if (files && files.length > 0) {
+      // Check if total files would exceed the limit
+      if (fileUrls.length + files.length > MAX_FILES) {
         return res.status(400).json({
-          message: `Cannot add ${newFiles.length} new files. Maximum ${MAX_FILES} files allowed. Currently ${currentFileUrls.length} files.`
+          message: `Cannot add ${files.length} files. Maximum ${MAX_FILES} files allowed per submission. Current count: ${fileUrls.length}`
         });
       }
-      for (const file of newFiles) {
-        const uploadResult = await uploadFile(file, 'submissions'); // Ensure uploadFile is compatible
-        uploadedFileUrls.push(uploadResult.secure_url || uploadResult.url); // Prefer secure_url
+
+      // Upload each file to Cloudinary
+      for (const file of files) {
+        const uploadResult = await uploadFile(file, 'submissions');
+        fileUrls.push(uploadResult.url);
       }
     }
-    
-    const finalFileUrls = [...currentFileUrls, ...uploadedFileUrls];
 
-    const submissionData = {
-      assignment_id: assignmentId,
-      user_id: userId,
-      content: content || '',
-      fileUrls: finalFileUrls, // Storing as an array of strings
-      submittedAt: new Date(),
-      updatedAt: new Date()
-    };
-
-    const existingSubmission = await db().collection('submissions').findOne({
-      assignment_id: assignmentId,
-      user_id: userId
+    // Check if submission already exists
+    const existingSubmission = await Submission.findOne({
+      assignment_id: req.params.id,
+      user_id: req.user.id
     });
 
-    let savedSubmission;
     if (existingSubmission) {
-      const result = await db().collection('submissions').updateOne(
-        { _id: existingSubmission._id },
-        { $set: { content: submissionData.content, fileUrls: submissionData.fileUrls, updatedAt: new Date() } }
-      );
-      savedSubmission = await db().collection('submissions').findOne({ _id: existingSubmission._id });
-      res.json({ message: 'Submission updated', submission: savedSubmission });
+      // Update existing submission
+      existingSubmission.content = content;
+      existingSubmission.file_urls = fileUrls;
+      const updatedSubmission = await existingSubmission.save();
+      
+      return res.json({ message: 'Submission updated', submission: updatedSubmission });
     } else {
-      const result = await db().collection('submissions').insertOne(submissionData);
-      savedSubmission = await db().collection('submissions').findOne({ _id: result.insertedId });
-      res.status(201).json({ message: 'Submission created', submission: savedSubmission });
-    }
+      // Create new submission
+      const submission = new Submission({
+        assignment_id: req.params.id,
+        user_id: req.user.id,
+        content,
+        file_urls: fileUrls
+      });
 
+      const savedSubmission = await submission.save();
+      return res.status(201).json({ message: 'Submission created', submission: savedSubmission });
+    }
   } catch (error) {
     console.error('Error submitting assignment:', error);
-    // Clean up uploaded files from multer if error occurs before Cloudinary upload
-    if (req.files) {
-        const fs = require('fs');
-        req.files.forEach(file => fs.unlink(file.path, err => {
-            if (err) console.error("Error deleting multer temp file:", err);
-        }));
-    }
-    res.status(500).json({ message: 'Server error during submission' });
+    res.status(500).json({ message: 'Server error' });
   }
 });
 
 // Get submissions for an assignment (aslab only)
 router.get('/:id/submissions', authenticate, authorize(['aslab']), async (req, res) => {
   try {
-    if (!ObjectId.isValid(req.params.id)) {
-      return res.status(400).json({ message: 'Invalid assignment ID format' });
-    }
-    const assignmentId = new ObjectId(req.params.id);
+    const submissions = await Submission.find({ assignment_id: req.params.id })
+      .populate('user_id', 'username')
+      .sort({ submitted_at: -1 });
 
-    const submissions = await db().collection('submissions').aggregate([
-      { $match: { assignment_id: assignmentId } },
-      {
-        $lookup: {
-          from: 'users',
-          localField: 'user_id',
-          foreignField: '_id',
-          as: 'userInfo'
-        }
-      },
-      { $unwind: '$userInfo' },
-      { // Attempt to join grades
-        $lookup: {
-          from: 'grades', // Assuming a 'grades' collection
-          localField: '_id', // submission_id in grades collection should reference submission._id
-          foreignField: 'submission_id',
-          as: 'gradeInfo'
-        }
-      },
-      { $unwind: { path: '$gradeInfo', preserveNullAndEmptyArrays: true } }, // Keep submission even if no grade
-      {
-        $lookup: { // For graded_by username
-            from: 'users',
-            localField: 'gradeInfo.graded_by',
-            foreignField: '_id',
-            as: 'graderInfo'
-        }
-      },
-      { $unwind: { path: '$graderInfo', preserveNullAndEmptyArrays: true } },
-      {
-        $project: {
-          _id: 1,
-          assignment_id: 1,
-          user_id: 1,
-          content: 1,
-          fileUrls: 1,
-          submittedAt: 1,
-          updatedAt: 1,
-          username: '$userInfo.username',
-          grade: '$gradeInfo.grade',
-          feedback: '$gradeInfo.feedback',
-          gradedAt: '$gradeInfo.gradedAt',
-          graded_by_username: '$graderInfo.username'
-        }
-      },
-      { $sort: { submittedAt: -1 } }
-    ]).toArray();
+    // Get grades for all submissions
+    const submissionIds = submissions.map(sub => sub._id);
+    const grades = await Grade.find({ submission_id: { $in: submissionIds } })
+      .populate('graded_by', 'username');
 
-    res.json(submissions);
+    // Create a map of grades by submission_id
+    const gradeMap = {};
+    grades.forEach(grade => {
+      gradeMap[grade.submission_id.toString()] = {
+        grade: grade.grade,
+        feedback: grade.feedback,
+        graded_at: grade.graded_at,
+        graded_by: grade.graded_by.username
+      };
+    });
+
+    // Transform data to match original structure
+    const transformedSubmissions = submissions.map(submission => {
+      const gradeInfo = gradeMap[submission._id.toString()];
+      return {
+        ...submission.toObject(),
+        username: submission.user_id.username,
+        grade: gradeInfo?.grade || null,
+        feedback: gradeInfo?.feedback || null,
+        graded_at: gradeInfo?.graded_at || null,
+        graded_by: gradeInfo?.graded_by || null,
+        file_url: JSON.stringify(submission.file_urls) // Convert array to JSON string for compatibility
+      };
+    });
+
+    res.json(transformedSubmissions);
   } catch (error) {
     console.error('Error fetching submissions:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
 
-// Grade a submission (aslab only) - Assuming a 'grades' collection
-router.post('/:assignmentId/submissions/:submissionId/grade', authenticate, authorize(['aslab']), async (req, res) => {
+// Grade a submission (aslab only)
+router.post('/:id/submissions/:submissionId/grade', authenticate, authorize(['aslab']), async (req, res) => {
   try {
-    if (!ObjectId.isValid(req.params.assignmentId) || !ObjectId.isValid(req.params.submissionId)) {
-      return res.status(400).json({ message: 'Invalid ID format' });
-    }
-    const assignmentId = new ObjectId(req.params.assignmentId); // Not directly used for query but good for context
-    const submissionId = new ObjectId(req.params.submissionId);
-    const graderId = new ObjectId(req.user.id);
-
     const { grade, feedback } = req.body;
+    const { submissionId } = req.params;
+
+    // Validate grade
     const numericGrade = parseFloat(grade);
     if (isNaN(numericGrade) || numericGrade < 0 || numericGrade > 100) {
       return res.status(400).json({ message: 'Grade must be a number between 0 and 100' });
     }
 
-    const submission = await db().collection('submissions').findOne({ _id: submissionId, assignment_id: assignmentId });
+    // Check if submission exists
+    const submission = await Submission.findOne({
+      _id: submissionId,
+      assignment_id: req.params.id
+    });
+
     if (!submission) {
-      return res.status(404).json({ message: 'Submission not found for this assignment' });
+      return res.status(404).json({ message: 'Submission not found' });
     }
 
+    // Check if grade already exists
+    const existingGrade = await Grade.findOne({ submission_id: submissionId });
+
+    let savedGrade;
+
+    if (existingGrade) {
+      // Update existing grade
+      existingGrade.grade = numericGrade;
+      existingGrade.feedback = feedback;
+      existingGrade.graded_by = req.user.id;
+      savedGrade = await existingGrade.save();
+    } else {
+      // Create new grade
+      const newGrade = new Grade({
+        submission_id: submissionId,
+        grade: numericGrade,
+        feedback,
+        graded_by: req.user.id
+      });
+      savedGrade = await newGrade.save();
+    }
+
+    // Get username of grader
+    const grader = await User.findById(req.user.id).select('username');
+
     const gradeData = {
-      submission_id: submissionId,
-      assignment_id: assignmentId, // Store for context if needed
-      grade: numericGrade,
-      feedback: feedback || '',
-      graded_by: graderId,
-      gradedAt: new Date()
+      ...savedGrade.toObject(),
+      graded_by: grader.username
     };
 
-    // Upsert logic for grades
-    const result = await db().collection('grades').updateOne(
-      { submission_id: submissionId },
-      { $set: gradeData },
-      { upsert: true }
-    );
-    
-    const finalGradeData = await db().collection('grades').aggregate([
-        { $match: { submission_id: submissionId } },
-        {
-            $lookup: {
-                from: 'users',
-                localField: 'graded_by',
-                foreignField: '_id',
-                as: 'graderInfo'
-            }
-        },
-        { $unwind: '$graderInfo'},
-        {
-            $project: {
-                _id: 1, submission_id: 1, grade: 1, feedback: 1, gradedAt: 1,
-                graded_by: '$graderInfo.username' // Return username instead of ID
-            }
-        }
-    ]).next();
-
-
-    res.json({ message: 'Grade saved successfully', grade: finalGradeData });
+    res.json({ message: 'Grade saved successfully', grade: gradeData });
   } catch (error) {
     console.error('Error grading submission:', error);
     res.status(500).json({ message: 'Server error' });
@@ -526,106 +383,77 @@ router.post('/:assignmentId/submissions/:submissionId/grade', authenticate, auth
 // Get user's submission for an assignment (including grade and feedback)
 router.get('/:id/my-submission', authenticate, async (req, res) => {
   try {
-    if (!ObjectId.isValid(req.params.id)) {
-      return res.status(400).json({ message: 'Invalid assignment ID format' });
-    }
-    const assignmentId = new ObjectId(req.params.id);
-    const userId = new ObjectId(req.user.id);
-
-    const submission = await db().collection('submissions').aggregate([
-      { $match: { assignment_id: assignmentId, user_id: userId } },
-      {
-        $lookup: {
-          from: 'grades',
-          localField: '_id', // submission._id
-          foreignField: 'submission_id',
-          as: 'gradeInfo'
-        }
-      },
-      { $unwind: { path: '$gradeInfo', preserveNullAndEmptyArrays: true } },
-      {
-        $lookup: {
-            from: 'users',
-            localField: 'gradeInfo.graded_by',
-            foreignField: '_id',
-            as: 'graderInfo'
-        }
-      },
-      { $unwind: { path: '$graderInfo', preserveNullAndEmptyArrays: true } },
-      {
-        $project: {
-          _id: 1, content: 1, fileUrls: 1, submittedAt: 1, updatedAt: 1,
-          grade: '$gradeInfo.grade',
-          feedback: '$gradeInfo.feedback',
-          gradedAt: '$gradeInfo.gradedAt',
-          graded_by_username: '$graderInfo.username'
-        }
-      }
-    ]).next();
+    const submission = await Submission.findOne({
+      assignment_id: req.params.id,
+      user_id: req.user.id
+    });
 
     if (!submission) {
       return res.status(404).json({ message: 'No submission found' });
     }
-    res.json(submission);
+
+    // Get grade information
+    const grade = await Grade.findOne({ submission_id: submission._id })
+      .populate('graded_by', 'username');
+
+    // Transform data to match original structure
+    const transformedSubmission = {
+      ...submission.toObject(),
+      grade: grade?.grade || null,
+      feedback: grade?.feedback || null,
+      graded_at: grade?.graded_at || null,
+      graded_by: grade?.graded_by?.username || null,
+      file_url: JSON.stringify(submission.file_urls) // Convert array to JSON string for compatibility
+    };
+
+    res.json(transformedSubmission);
   } catch (error) {
     console.error('Error fetching submission:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
 
-// Get all assignments (for assignment listing page - simplified)
-// This route might need more complex logic based on user role similar to /upcoming
+// Get all assignments (for assignment listing page)
 router.get('/', authenticate, async (req, res) => {
   try {
-    const userId = new ObjectId(req.user.id);
-    let pipeline = [];
+    let assignments;
 
     if (req.user.role === 'aslab') {
-      pipeline.push(
-        { $match: {} } // Matches all assignments for aslab
-      );
-    } else { // Praktikan
-      const enrollments = await db().collection('class_enrollments').find({ user_id: userId }).toArray();
-      const enrolledClassIds = enrollments.map(e => e.class_id);
-      pipeline.push(
-        { $match: { class_id: { $in: enrolledClassIds } } }
-        // Optionally, add logic to exclude submitted assignments like in /upcoming if needed
-      );
+      // For aslab, get all assignments
+      assignments = await Assignment.find()
+        .populate('class_id', 'title')
+        .populate('created_by', 'username')
+        .sort({ deadline: 1 });
+    } else {
+      // For praktikan, get assignments from enrolled classes
+      const enrollments = await ClassEnrollment.find({ user_id: req.user.id }).select('class_id');
+      const classIds = enrollments.map(enrollment => enrollment.class_id);
+
+      let assignmentQuery = { class_id: { $in: classIds } };
+
+      // Exclude assignments that have already been submitted by the user
+      if (req.user.role === 'praktikan') {
+        const submittedAssignments = await Submission.find({ user_id: req.user.id }).select('assignment_id');
+        const submittedAssignmentIds = submittedAssignments.map(sub => sub.assignment_id);
+        assignmentQuery._id = { $nin: submittedAssignmentIds };
+      }
+
+      assignments = await Assignment.find(assignmentQuery)
+        .populate('class_id', 'title')
+        .populate('created_by', 'username')
+        .sort({ deadline: 1 });
     }
 
-    pipeline.push(
-      {
-        $lookup: {
-          from: 'classes',
-          localField: 'class_id',
-          foreignField: '_id',
-          as: 'classInfo'
-        }
-      },
-      { $unwind: '$classInfo' },
-      {
-        $lookup: {
-          from: 'users',
-          localField: 'created_by',
-          foreignField: '_id',
-          as: 'creatorInfo'
-        }
-      },
-      { $unwind: '$creatorInfo' },
-      {
-        $project: {
-          _id: 1, title: 1, description: 1, deadline: 1, createdAt: 1,
-          class_title: '$classInfo.title',
-          creator_name: '$creatorInfo.username'
-        }
-      },
-      { $sort: { deadline: 1 } }
-    );
+    // Transform data to match original structure
+    const transformedAssignments = assignments.map(assignment => ({
+      ...assignment.toObject(),
+      class_title: assignment.class_id.title,
+      creator_name: assignment.created_by.username
+    }));
 
-    const assignments = await db().collection('assignments').aggregate(pipeline).toArray();
-    res.json(assignments);
+    res.json(transformedAssignments);
   } catch (error) {
-    console.error('Error fetching all assignments:', error);
+    console.error('Error fetching assignments:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

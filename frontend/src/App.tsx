@@ -9,6 +9,7 @@ import Register from './components/auth/Register';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import Unauthorized from './components/auth/Unauthorized';
 import Dashboard from './components/dashboard/Dashboard';
+
 import AssignmentList from './components/assignments/AssignmentList';
 import AssignmentDetail from './components/assignments/AssignmentDetail';
 import AssignmentSubmission from './components/assignments/AssignmentSubmission';
@@ -25,6 +26,7 @@ import NewsDetail from './components/news/NewsDetail';
 import NewsForm from './components/news/NewsForm';
 import SocialPage from './components/social/SocialPage';
 import PostDetail from './components/social/PostDetail';
+import PostEditPage from './components/social/PostEditPage';
 
 function App() {
   // Disable scroll restoration from React Router
@@ -68,6 +70,7 @@ function App() {
                   <Route path="/profile" element={<Profile />} />
                   <Route path="/social" element={<SocialPage />} />
                   <Route path="/social/:id" element={<PostDetail />} />
+                  <Route path="/social/:id/edit" element={<PostEditPage />} />
                 </Route>
 
                 {/* Aslab-only routes */}
